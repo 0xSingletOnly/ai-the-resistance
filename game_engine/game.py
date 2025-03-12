@@ -4,7 +4,7 @@ Main game engine for The Resistance: Avalon.
 import random
 from typing import List, Dict, Optional, Set, Tuple
 from .enums import Team, Role, GamePhase, QuestResult, VoteType
-from .models import Player, Quest
+from .models import Player, Quest, TeamVoteRecord
 
 class AvalonGame:
     """Main game class for The Resistance: Avalon"""
@@ -273,6 +273,25 @@ class AvalonGame:
     
     def _process_quest_result(self):
         """Process the quest result and update game state"""
+        current_quest = self.get_current_quest()
+        result = current_quest.result
+
+        # Update the quest result in all team vote records for this quest
+        for player in self.players:
+            for vote in player.team_vote_history:
+                if vote.quest_number == current_quest.quest_number:
+                    # Create new record with quest result
+                    new_record = TeamVoteRecord(
+                        quest_number=vote.quest_number,
+                        leader=vote.leader,
+                        proposed_team=vote.proposed_team,
+                        vote=vote.vote,
+                        quest_result=result
+                    )
+                    # Replace old record with new one containing quest result
+                    idx = player.team_vote_history.index(vote)
+                    player.team_vote_history[idx] = new_record
+
         # Check if the game is over
         if self.succeeded_quests >= 3:
             # If good team has won 3 quests, proceed to assassination
@@ -350,7 +369,7 @@ class AvalonGame:
             for_player: If provided, only return information visible to this player
         """
         state = {
-            "phase": self.phase.value,  # Convert enum to string
+            "phase": self.phase.value,
             "current_quest_number": self.current_quest_idx + 1,
             "succeeded_quests": self.succeeded_quests,
             "failed_quests": self.failed_quests,
@@ -363,9 +382,58 @@ class AvalonGame:
             state["role"] = for_player.role.value
             state["team"] = for_player.team.value
             state["visible_roles"] = {p.name: r.value for p, r in self.get_visible_roles(for_player).items()}
+            
+            # Always show team votes with quest results if available
+            state["voting_history"] = {
+                "team_votes": [
+                    {
+                        "quest": record.quest_number,
+                        "leader": record.leader,
+                        "proposed_team": record.proposed_team,
+                        "vote": record.vote.value,
+                        "quest_result": record.quest_result.value if record.quest_result else None
+                    } for record in for_player.team_vote_history
+                ]
+            }
+            
+            # Only show quest votes if game is over
+            if self.phase == GamePhase.GAME_END:
+                state["voting_history"]["quest_votes"] = [
+                    {
+                        "quest": record.quest_number,
+                        "team": record.team,
+                        "vote": record.vote.value
+                    } for record in for_player.quest_vote_history
+                ]
         else:
             # Full game state for spectators/logging
-            state["players"] = {p.name: {"role": p.role.value, "team": p.team.value} for p in self.players}
+            state["players"] = {
+                p.name: {
+                    "role": p.role.value,
+                    "team": p.team.value,
+                    "team_votes": [
+                        {
+                            "quest": record.quest_number,
+                            "leader": record.leader,
+                            "proposed_team": record.proposed_team,
+                            "vote": record.vote.value,
+                            "quest_result": record.quest_result.value if record.quest_result else None
+                        } for record in p.team_vote_history
+                    ]
+                } for p in self.players
+            }
+            
+            # Only show quest votes if game is over
+            if self.phase == GamePhase.GAME_END:
+                for p_name, p_state in state["players"].items():
+                    player = next(p for p in self.players if p.name == p_name)
+                    p_state["quest_votes"] = [
+                        {
+                            "quest": record.quest_number,
+                            "team": record.team,
+                            "vote": record.vote.value
+                        } for record in player.quest_vote_history
+                    ]
         
         # Add current quest info
         current_quest = self.get_current_quest()
@@ -379,3 +447,42 @@ class AvalonGame:
             state["winner"] = self.get_winner().value if self.get_winner() else None
         
         return state
+
+    def end_game(self, winning_team: Team) -> None:
+        """End the game and log the final state"""
+        self.winning_team = winning_team
+
+        # Log game end state
+        self.logger.info(f"\nGame Over! {winning_team.name} team wins!")
+        self.logger.info("\nFinal game state:")
+        self.logger.info(f"Winning team: {winning_team.name}")
+        
+        # Log each player's role and detailed voting history
+        self.logger.info("\nVoting History:")
+        for player in self.players:
+            self.logger.info(f"\n{player.name} ({player.role.name}):")
+            
+            # Log team votes history
+            self.logger.info("  Team votes:")
+            for vote in player.team_vote_history:
+                result_str = ""
+                if vote.quest_result:
+                    result_str = f" ({vote.quest_result.value})"
+                
+                self.logger.info(
+                    f"    Quest {vote.quest_number}{result_str} - Leader {vote.leader}"
+                    f"\n      Team: {', '.join(vote.proposed_team)}"
+                    f"\n      Vote: {vote.vote.name}"
+                )
+            
+            # Log quest votes history (only at end of game)
+            if player.quest_vote_history:  # Only show if they participated in any quests
+                self.logger.info("  Quest votes:")
+                for vote in player.quest_vote_history:
+                    self.logger.info(
+                        f"    Quest {vote.quest_number}"
+                        f"\n      Team: {', '.join(vote.team)}"
+                        f"\n      Vote: {vote.vote.name}"
+                    )
+
+        self._save_game_state()

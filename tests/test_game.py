@@ -363,6 +363,109 @@ class TestGameFlow(unittest.TestCase):
         visible_to_evil = self.game.get_visible_roles(evil_player)
         self.assertEqual(len(visible_to_evil), 2)  # Self + other evil player
         self.assertIn(self.game.players[4], visible_to_evil)  # Minion
+    
+    def test_vote_history_tracking(self):
+        """Test that voting history is properly tracked"""
+        # Set up game with known roles
+        self.game.phase = GamePhase.TEAM_BUILDING
+        leader = self.game.players[0]  # Alice
+        team = [self.game.players[0], self.game.players[1]]  # Alice, Bob
+        
+        # Propose and vote on first team
+        self.game.propose_team(leader, team)
+        
+        # Record votes for the team
+        self.game.vote_for_team(self.game.players[0], VoteType.APPROVE)
+        self.game.vote_for_team(self.game.players[1], VoteType.APPROVE)
+        self.game.vote_for_team(self.game.players[2], VoteType.REJECT)
+        self.game.vote_for_team(self.game.players[3], VoteType.REJECT)
+        self.game.vote_for_team(self.game.players[4], VoteType.APPROVE)
+        
+        # Verify team vote history
+        self.assertEqual(len(self.game.players[0].team_vote_history), 1)
+        self.assertEqual(self.game.players[0].team_vote_history[0].vote, VoteType.APPROVE)
+        self.assertEqual(self.game.players[2].team_vote_history[0].vote, VoteType.REJECT)
+        
+        # Team approved (3 vs 2), go on quest
+        self.assertEqual(self.game.phase, GamePhase.QUEST)
+        
+        # Record quest votes
+        self.game.vote_on_quest(self.game.players[0], VoteType.SUCCESS)
+        self.game.vote_on_quest(self.game.players[1], VoteType.SUCCESS)
+        
+        # Verify quest vote history
+        self.assertEqual(len(self.game.players[0].quest_vote_history), 1)
+        self.assertEqual(self.game.players[0].quest_vote_history[0].vote, VoteType.SUCCESS)
+        self.assertEqual(len(self.game.players[1].quest_vote_history), 1)
+        self.assertEqual(self.game.players[1].quest_vote_history[0].vote, VoteType.SUCCESS)
+        
+        # Players not on quest should have empty quest vote history
+        self.assertEqual(len(self.game.players[2].quest_vote_history), 0)
+    
+    def test_game_state_includes_voting_history(self):
+        """Test that game state includes voting history"""
+        # Set up and run a round of voting
+        self.game.phase = GamePhase.TEAM_BUILDING
+        leader = self.game.players[0]
+        team = [self.game.players[0], self.game.players[1]]
+        
+        self.game.propose_team(leader, team)
+        
+        # Record team votes
+        for i, player in enumerate(self.game.players):
+            vote = VoteType.APPROVE if i < 3 else VoteType.REJECT
+            self.game.vote_for_team(player, vote)
+        
+        # Get game state for a specific player
+        state = self.game.get_game_state(self.game.players[0])
+        
+        # Verify voting history is included
+        self.assertIn("voting_history", state)
+        self.assertIn("team_votes", state["voting_history"])
+        self.assertIn("quest_votes", state["voting_history"])
+        self.assertEqual(len(state["voting_history"]["team_votes"]), 1)
+        self.assertEqual(state["voting_history"]["team_votes"][0]["vote"], VoteType.APPROVE.value)
+        
+        # Get full game state
+        full_state = self.game.get_game_state()
+        
+        # Verify all players' voting histories are included
+        for player in self.game.players:
+            self.assertIn(player.name, full_state["players"])
+            self.assertIn("team_votes", full_state["players"][player.name])
+            self.assertIn("quest_votes", full_state["players"][player.name])
+            self.assertEqual(len(full_state["players"][player.name]["team_votes"]), 1)
+    
+    def test_multiple_rounds_voting_history(self):
+        """Test voting history across multiple rounds"""
+        self.game.phase = GamePhase.TEAM_BUILDING
+        
+        # First round
+        leader = self.game.players[0]
+        team = [self.game.players[0], self.game.players[1]]
+        
+        self.game.propose_team(leader, team)
+        
+        # All reject first proposal
+        for player in self.game.players:
+            self.game.vote_for_team(player, VoteType.REJECT)
+        
+        # Second round
+        self.assertEqual(self.game.phase, GamePhase.TEAM_BUILDING)
+        leader = self.game.players[1]  # New leader
+        team = [self.game.players[1], self.game.players[2]]
+        
+        self.game.propose_team(leader, team)
+        
+        # All approve second proposal
+        for player in self.game.players:
+            self.game.vote_for_team(player, VoteType.APPROVE)
+        
+        # Verify voting history length and votes
+        for player in self.game.players:
+            self.assertEqual(len(player.team_vote_history), 2)
+            self.assertEqual(player.team_vote_history[0].vote, VoteType.REJECT)
+            self.assertEqual(player.team_vote_history[1].vote, VoteType.APPROVE)
 
 
 if __name__ == "__main__":

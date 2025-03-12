@@ -59,6 +59,140 @@ class TestPlayer(unittest.TestCase):
         player.assign_role(Role.MINION)
         self.assertEqual(player.role, Role.MINION)
         self.assertEqual(player.team, Team.EVIL)
+    
+    def test_add_team_vote(self):
+        """Test adding team votes to player history."""
+        player = Player("Alice")
+        player.assign_role(Role.MERLIN)
+        
+        # Add some team votes
+        player.add_team_vote(
+            vote=VoteType.APPROVE,
+            quest_number=1,
+            leader="Bob",
+            proposed_team=["Bob", "Alice", "Charlie"]
+        )
+        player.add_team_vote(
+            vote=VoteType.REJECT,
+            quest_number=1,
+            leader="Charlie",
+            proposed_team=["Charlie", "Dave", "Eve"]
+        )
+        
+        # Check voting history
+        self.assertEqual(len(player.team_vote_history), 2)
+        self.assertEqual(player.team_vote_history[0].vote, VoteType.APPROVE)
+        self.assertEqual(player.team_vote_history[0].leader, "Bob")
+        self.assertEqual(player.team_vote_history[1].vote, VoteType.REJECT)
+        self.assertEqual(player.team_vote_history[1].leader, "Charlie")
+    
+    def test_add_quest_vote(self):
+        """Test adding quest votes to player history."""
+        player = Player("Bob")
+        player.assign_role(Role.ASSASSIN)
+        
+        # Add some quest votes
+        player.add_quest_vote(
+            vote=VoteType.SUCCESS,
+            quest_number=1,
+            team=["Alice", "Bob", "Charlie"]
+        )
+        player.add_quest_vote(
+            vote=VoteType.FAIL,
+            quest_number=2,
+            team=["Bob", "Dave", "Eve"]
+        )
+        
+        # Check voting history
+        self.assertEqual(len(player.quest_vote_history), 2)
+        self.assertEqual(player.quest_vote_history[0].vote, VoteType.SUCCESS)
+        self.assertEqual(player.quest_vote_history[0].team, ["Alice", "Bob", "Charlie"])
+        self.assertEqual(player.quest_vote_history[1].vote, VoteType.FAIL)
+        self.assertEqual(player.quest_vote_history[1].team, ["Bob", "Dave", "Eve"])
+    
+    def test_invalid_team_vote(self):
+        """Test that invalid team votes are rejected."""
+        player = Player("Charlie")
+        
+        # Try to add invalid vote types
+        with self.assertRaises(ValueError):
+            player.add_team_vote(
+                vote=VoteType.SUCCESS,  # Invalid vote type for team vote
+                quest_number=1,
+                leader="Bob",
+                proposed_team=["Bob", "Alice", "Charlie"]
+            )
+        with self.assertRaises(ValueError):
+            player.add_team_vote(
+                vote=VoteType.FAIL,  # Invalid vote type for team vote
+                quest_number=1,
+                leader="Bob",
+                proposed_team=["Bob", "Alice", "Charlie"]
+            )
+            
+        # Check that no votes were recorded
+        self.assertEqual(len(player.team_vote_history), 0)
+    
+    def test_invalid_quest_vote(self):
+        """Test that invalid quest votes are rejected."""
+        player = Player("Dave")
+        
+        # Try to add invalid vote types
+        with self.assertRaises(ValueError):
+            player.add_quest_vote(
+                vote=VoteType.APPROVE,  # Invalid vote type for quest vote
+                quest_number=1,
+                team=["Bob", "Dave", "Eve"]
+            )
+        with self.assertRaises(ValueError):
+            player.add_quest_vote(
+                vote=VoteType.REJECT,  # Invalid vote type for quest vote
+                quest_number=1,
+                team=["Bob", "Dave", "Eve"]
+            )
+            
+        # Check that no votes were recorded
+        self.assertEqual(len(player.quest_vote_history), 0)
+    
+    def test_team_vote_history(self):
+        """Test team vote history tracking with context"""
+        player = Player("Alice")
+        player.assign_role(Role.MERLIN)
+        
+        # Test a team vote with context
+        player.add_team_vote(
+            vote=VoteType.APPROVE,
+            quest_number=1,
+            leader="Bob",
+            proposed_team=["Bob", "Alice", "Charlie"]
+        )
+        
+        # Check the recorded vote
+        self.assertEqual(len(player.team_vote_history), 1)
+        record = player.team_vote_history[0]
+        self.assertEqual(record.quest_number, 1)
+        self.assertEqual(record.leader, "Bob")
+        self.assertEqual(record.proposed_team, ["Bob", "Alice", "Charlie"])
+        self.assertEqual(record.vote, VoteType.APPROVE)
+    
+    def test_quest_vote_history(self):
+        """Test quest vote history tracking with context"""
+        player = Player("Alice")
+        player.assign_role(Role.MERLIN)
+        
+        # Test a quest vote with context
+        player.add_quest_vote(
+            vote=VoteType.SUCCESS,
+            quest_number=1,
+            team=["Alice", "Bob", "Charlie"]
+        )
+        
+        # Check the recorded vote
+        self.assertEqual(len(player.quest_vote_history), 1)
+        record = player.quest_vote_history[0]
+        self.assertEqual(record.quest_number, 1)
+        self.assertEqual(record.team, ["Alice", "Bob", "Charlie"])
+        self.assertEqual(record.vote, VoteType.SUCCESS)
 
 
 class TestQuest(unittest.TestCase):

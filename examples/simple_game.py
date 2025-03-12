@@ -40,6 +40,28 @@ def print_game_state(game: AvalonGame):
     print(f"Failed Quests: {game.failed_quests}")
     print(f"Current Leader: {game.get_current_leader().name}")
     
+    # Display voting history for all players
+    print("\nVoting History:")
+    for player in game.players:
+        print(f"\n{player.name}:")
+        if player.team_vote_history:
+            print("  Team votes:")
+            for record in player.team_vote_history:
+                quest_result = f" ({record.quest_result.value})" if record.quest_result else ""
+                print(f"    Quest {record.quest_number}{quest_result} - Leader {record.leader}")
+                print(f"      Team: {', '.join(record.proposed_team)}")
+                print(f"      Vote: {record.vote.value}")
+        else:
+            print("  No team votes yet")
+            
+        # Only show quest votes if the game is over
+        if game.phase == GamePhase.GAME_END and player.quest_vote_history:
+            print("  Quest votes:")
+            for record in player.quest_vote_history:
+                print(f"    Quest {record.quest_number}")
+                print(f"      Team: {', '.join(record.team)}")
+                print(f"      Vote: {record.vote.value}")
+    
     # Display quests information
     print("\nQuests:")
     for i, quest in enumerate(game.quests):
