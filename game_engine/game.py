@@ -350,7 +350,7 @@ class AvalonGame:
             for_player: If provided, only return information visible to this player
         """
         state = {
-            "phase": self.phase,
+            "phase": self.phase.value,  # Convert enum to string
             "current_quest_number": self.current_quest_idx + 1,
             "succeeded_quests": self.succeeded_quests,
             "failed_quests": self.failed_quests,
