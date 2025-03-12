@@ -273,11 +273,6 @@ class AvalonGame:
     
     def _process_quest_result(self):
         """Process the quest result and update game state"""
-        current_quest = self.get_current_quest()
-        result = current_quest.result  # Use the already processed result
-        
-        # No need to update counters here, as they were already updated in vote_on_quest
-        
         # Check if the game is over
         if self.succeeded_quests >= 3:
             # If good team has won 3 quests, proceed to assassination

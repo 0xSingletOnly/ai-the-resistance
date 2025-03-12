@@ -85,6 +85,9 @@ def run_simple_game():
     
     # Main game loop
     while not game.is_game_over():
+        # wait for user to press enter key before proceeding
+        input("Press Enter to continue...")
+
         print_game_state(game)
         
         if game.phase == GamePhase.TEAM_BUILDING:
@@ -160,7 +163,8 @@ def run_simple_game():
             # Determine the result
             result = quest.process_result()
             
-            print(f"Quest {game.current_quest_idx + 1} {result.value}!")
+            # current_quest_idx incremented in `process_result`
+            print(f"Quest {game.current_quest_idx} {result.value}!")
             
             # To maintain secrecy, only show the count of fail votes, not who voted fail
             fail_count = sum(1 for v in quest_votes.values() if v == VoteType.FAIL)
@@ -168,7 +172,7 @@ def run_simple_game():
             
             # Log quest result
             log_game_event(logger, "quest_result", {
-                "quest_number": game.current_quest_idx + 1,
+                "quest_number": game.current_quest_idx,
                 "result": result.value,
                 "fail_votes": fail_count
             })
