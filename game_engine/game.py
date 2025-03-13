@@ -450,12 +450,27 @@ class AvalonGame:
 
     def end_game(self, winning_team: Team) -> None:
         """End the game and log the final state"""
+        # Use lazy import to avoid circular dependency with metrics.evaluator
+        # The GameEvaluator is only needed at the end of the game
+        from .metrics import GameEvaluator
+
         self.winning_team = winning_team
 
+        # Calculate and save metrics
+        metrics = GameEvaluator.evaluate_game(self)
+        
         # Log game end state
         self.logger.info(f"\nGame Over! {winning_team.name} team wins!")
         self.logger.info("\nFinal game state:")
         self.logger.info(f"Winning team: {winning_team.name}")
+        
+        # Log metrics
+        self.logger.info("\nGame Metrics:")
+        self.logger.info(f"Quest Success Rate (Good Team): {metrics['team_metrics']['good_team']['quest_success_rate']:.2%}")
+        self.logger.info(f"Quest Failure Rate (Evil Team): {metrics['team_metrics']['evil_team']['quest_failure_rate']:.2%}")
+        self.logger.info(f"Evil Team Quest Participation: {metrics['deception_metrics']['evil_team_quest_participation']}")
+        self.logger.info(f"Successful Deceptions: {metrics['deception_metrics']['successful_deceptions']}")
+        self.logger.info(f"Deception Success Rate: {metrics['deception_metrics']['deception_success_rate']:.2%}")
         
         # Log each player's role and detailed voting history
         self.logger.info("\nVoting History:")

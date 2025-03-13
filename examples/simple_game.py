@@ -5,12 +5,14 @@ import sys
 import os
 import random
 from typing import List, Dict
+from collections import defaultdict
 
 # Add the parent directory to the path so we can import the game engine
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from game_engine.engine import AvalonGame, Team, Role, GamePhase, VoteType
+from game_engine.engine import Team, Role, GamePhase, VoteType, AvalonGame
 from game_engine.utils import generate_game_id, setup_game_logger, log_game_event, save_game_state
+from game_engine.metrics.evaluator import GameEvaluator
 
 
 def print_player_info(game: AvalonGame, player_idx: int):
@@ -108,7 +110,7 @@ def run_simple_game():
     # Main game loop
     while not game.is_game_over():
         # wait for user to press enter key before proceeding
-        input("Press Enter to continue...")
+        #input("Press Enter to continue...")
 
         print_game_state(game)
         
@@ -233,16 +235,133 @@ def run_simple_game():
     for player in game.players:
         print(f"  {player.name}: {player.role.value} ({player.team.value})")
     
+    # Calculate and log game metrics
+    metrics = GameEvaluator.evaluate_game(game)
+    print("\nGame Metrics:")
+    print("Team Metrics:", metrics["team_metrics"])
+    print("Deception Metrics:", metrics["deception_metrics"])
+    
     # Log game end
     log_game_event(logger, "game_end", {
         "winner": winner.value,
         "succeeded_quests": game.succeeded_quests,
-        "failed_quests": game.failed_quests
+        "failed_quests": game.failed_quests,
+        "metrics": metrics
     })
     
     # Save final game state
     save_game_state(game.get_game_state(), game_id)
 
 
+def run_multiple_games(num_games: int = 100):
+    """Run multiple games and collect statistics"""
+    stats = {
+        "wins": defaultdict(int),
+        "total_games": num_games,
+        "evil_deception_success": {
+            "total_evil_on_quests": 0,
+            "total_evil_proposed": 0,
+            "total_evil_opportunities": 0  # number of quest slots available
+        }
+    }
+    
+    print(f"Running {num_games} games...")
+    
+    for game_num in range(num_games):
+        # Create a game with 5 players
+        player_names = ["Alice", "Bob", "Charlie", "Dave", "Eve"]
+        game = AvalonGame(player_names)
+        
+        # Generate a game ID and setup logging
+        game_id = generate_game_id()
+        logger = setup_game_logger(game_id)
+        
+        # Start the game - move from SETUP to TEAM_BUILDING
+        game.phase = GamePhase.TEAM_BUILDING
+        
+        # Main game loop
+        while not game.is_game_over():
+            if game.phase == GamePhase.TEAM_BUILDING:
+                leader = game.get_current_leader()
+                quest = game.get_current_quest()
+                team_size = quest.required_team_size
+                team = random.sample(game.players, team_size)
+                game.propose_team(leader, team)
+                
+            elif game.phase == GamePhase.TEAM_VOTING:
+                votes = {}
+                for player in game.players:
+                    team = game.get_current_quest().team
+                    good_count = sum(1 for p in team if p.team == Team.GOOD)
+                    evil_count = len(team) - good_count
+                    
+                    if player.team == Team.GOOD:
+                        approve_probability = 0.5 + (good_count / len(team)) * 0.3
+                    else:
+                        approve_probability = 0.4 + (evil_count / len(team)) * 0.4
+                    
+                    vote = VoteType.APPROVE if random.random() < approve_probability else VoteType.REJECT
+                    votes[player] = vote
+                    game.vote_for_team(player, vote)
+                
+            elif game.phase == GamePhase.QUEST:
+                quest = game.get_current_quest()
+                team = quest.team
+                quest_votes = {}
+                
+                # Count evil players proposed for this quest
+                evil_players_proposed = sum(1 for p in team if p.team == Team.EVIL)
+                stats["evil_deception_success"]["total_evil_proposed"] += evil_players_proposed
+                stats["evil_deception_success"]["total_evil_opportunities"] += len(team)
+                
+                for player in team:
+                    if player.team == Team.GOOD:
+                        vote = VoteType.SUCCESS
+                    else:
+                        vote_fail_probability = 0.7
+                        vote = VoteType.FAIL if random.random() < vote_fail_probability else VoteType.SUCCESS
+                        if vote == VoteType.FAIL:
+                            stats["evil_deception_success"]["total_evil_on_quests"] += 1
+                    
+                    quest_votes[player] = vote
+                    game.vote_on_quest(player, vote)
+                
+                quest.process_result()
+                
+            elif game.phase == GamePhase.ASSASSINATION:
+                assassin = game.assassin
+                good_players = [p for p in game.players if p.team == Team.GOOD]
+                target = random.choice(good_players)
+                game.assassinate(target)
+        
+        # Game is over, collect stats
+        winner = game.get_winner()
+        stats["wins"][winner.value] += 1
+        
+        # Calculate metrics for this game
+        metrics = GameEvaluator.evaluate_game(game)
+        
+        if (game_num + 1) % 10 == 0:
+            print(f"Completed {game_num + 1} games...")
+    
+    # Print final statistics
+    print("\nFinal Statistics:")
+    print("=" * 50)
+    print("Win Rates:")
+    for team, wins in stats["wins"].items():
+        win_rate = (wins / stats["total_games"]) * 100
+        print(f"{team}: {win_rate:.1f}% ({wins}/{stats['total_games']})")
+    
+    print("\nEvil Team Deception Metrics:")
+    evil_proposed_rate = (stats["evil_deception_success"]["total_evil_proposed"] / 
+                         stats["evil_deception_success"]["total_evil_opportunities"]) * 100
+    print(f"Evil players proposed for quests: {evil_proposed_rate:.1f}%")
+    
+    if stats["evil_deception_success"]["total_evil_proposed"] > 0:
+        evil_success_rate = (stats["evil_deception_success"]["total_evil_on_quests"] / 
+                           stats["evil_deception_success"]["total_evil_proposed"]) * 100
+        print(f"Evil players successfully sabotaged when on quest: {evil_success_rate:.1f}%")
+
 if __name__ == "__main__":
-    run_simple_game()
+    # Change this to run_simple_game() if you want to run a single game
+    run_multiple_games(100)
