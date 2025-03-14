@@ -16,6 +16,8 @@ from game_engine.metrics.evaluator import GameEvaluator
 from game_engine.agents.base import AvalonAgent, RuleBasedAgent
 from game_engine.agents.llm import LLMAgent
 
+from game_engine.config import MAX_FAILED_VOTES
+
 
 def print_player_info(game: AvalonGame, player_idx: int):
     """Print information visible to a specific player"""
@@ -128,6 +130,7 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     # Main game loop
     while not game.is_game_over():
         print_game_state(game)
+        input("Press Enter to continue...")
         
         if game.phase == GamePhase.TEAM_BUILDING:
             # Current leader proposes a team
@@ -225,9 +228,19 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     # Game is over
     print_game_state(game)
     
-    # Determine the winner
+    # Determine the winner and explain why they won
     winner = game.get_winner()
-    print(f"\nGame over! {winner.value} team wins!")
+    print("\nGame over!")
+    
+    if winner == Team.GOOD:
+        print("Good team wins by successfully completing 3 quests!")
+    else:  # Evil team won
+        if game.failed_votes_count >= MAX_FAILED_VOTES:
+            print("Evil team wins by causing distrust - 5 consecutive team proposals were rejected!")
+        elif game.failed_quests >= 3:
+            print("Evil team wins by failing 3 quests!")
+        elif game.assassinated_player and game.assassinated_player.role == Role.MERLIN:
+            print("Evil team wins by successfully assassinating Merlin!")
     
     # Show all player roles
     print("\nPlayer roles were:")

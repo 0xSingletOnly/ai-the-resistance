@@ -288,6 +288,9 @@ class AvalonGame:
         if not self.is_game_over():
             return None
         
+        if self.failed_votes_count >= MAX_FAILED_VOTES:
+            return Team.EVIL  # Evil team wins if too many team proposals are rejected
+        
         if self.failed_quests >= 3:
             return Team.EVIL
         
