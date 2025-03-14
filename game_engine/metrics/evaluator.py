@@ -21,14 +21,16 @@ class GameEvaluator:
     def _calculate_team_metrics(game: AvalonGame) -> Dict:
         """Calculate win rate and success metrics for each team"""
         winner = game.get_winner()
+        total_quests = game.succeeded_quests + game.failed_quests
+
         metrics = {
-            "winner": winner.value,
+            "winner": getattr(winner, 'value', None),
             "good_team": {
-                "quest_success_rate": game.succeeded_quests / (game.succeeded_quests + game.failed_quests),
+                "quest_success_rate": game.succeeded_quests / total_quests if total_quests > 0 else 0,
                 "won_game": winner == Team.GOOD
             },
             "evil_team": {
-                "quest_failure_rate": game.failed_quests / (game.succeeded_quests + game.failed_quests),
+                "quest_failure_rate": game.failed_quests / total_quests if total_quests > 0 else 0,
                 "won_game": winner == Team.EVIL
             }
         }
