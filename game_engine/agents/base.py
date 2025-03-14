@@ -4,7 +4,7 @@ Base agent interface and implementations for The Resistance: Avalon.
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
 import random
-from ..enums import Team, Role, VoteType
+from ..enums import Team, Role, VoteType, QuestResult
 from ..models import Player, Quest
 from ..game import AvalonGame
 
@@ -86,23 +86,32 @@ class RuleBasedAgent(AvalonAgent):
     def vote_for_team(self, game: AvalonGame, proposed_team: List[Player]) -> VoteType:
         """
         Simple team voting strategy:
-        - Good players approve teams with more known good players
-        - Evil players approve teams with evil players
+        - Good players approve teams unless they see evil players
+        - Evil players approve teams with evil players or when rejections are high
         """
         visible_roles = game.get_visible_roles(self.player)
         
         if self.player.team == Team.GOOD:
-            # Count known good players on team
-            known_good = sum(1 for p in proposed_team 
+            # Reject only if we can see evil players on the team
+            known_evil = sum(1 for p in proposed_team 
                            if p in visible_roles and 
-                           visible_roles[p] in [Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT])
-            return VoteType.APPROVE if known_good >= len(proposed_team) / 2 else VoteType.REJECT
+                           visible_roles[p] in [Role.ASSASSIN, Role.MORGANA, Role.MINION])
+            return VoteType.REJECT if known_evil > 0 else VoteType.APPROVE
         else:
-            # Approve if there's at least one evil player
+            # Evil players are more likely to approve teams:
+            # - When they see other evil players
+            # - When there have been many rejections (to avoid losing by rejection)
             has_evil = any(p in visible_roles and 
                           visible_roles[p] in [Role.ASSASSIN, Role.MORGANA, Role.MINION] 
                           for p in proposed_team)
-            return VoteType.APPROVE if has_evil else VoteType.REJECT
+            
+            # More likely to approve as failed votes increase
+            approve_probability = 0.3  # Base probability
+            if has_evil:
+                approve_probability += 0.4  # Much more likely if evil players present
+            approve_probability += game.failed_votes_count * 0.1  # More likely as rejections increase
+            
+            return VoteType.APPROVE if random.random() < approve_probability else VoteType.REJECT
     
     def vote_on_quest(self, game: AvalonGame) -> VoteType:
         """
@@ -116,7 +125,6 @@ class RuleBasedAgent(AvalonAgent):
             # Evil players are more likely to fail later quests
             quest_idx = game.current_quest_idx
             fail_probability = 0.5 + (quest_idx * 0.1)  # Increases with each quest
-            import random
             return VoteType.FAIL if random.random() < fail_probability else VoteType.SUCCESS
     
     def choose_assassination_target(self, game: AvalonGame) -> Player:
