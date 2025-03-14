@@ -1,10 +1,10 @@
 """
-A simple example that demonstrates the use of the Avalon game engine.
+A simple example that demonstrates the use of the Avalon game engine with both rule-based and LLM agents.
 """
 import sys
 import os
 import random
-from typing import List, Dict
+from typing import List, Dict, Type, Optional
 from collections import defaultdict
 
 # Add the parent directory to the path so we can import the game engine
@@ -13,6 +13,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from game_engine.engine import Team, Role, GamePhase, VoteType, AvalonGame
 from game_engine.utils import generate_game_id, setup_game_logger, log_game_event, save_game_state
 from game_engine.metrics.evaluator import GameEvaluator
+from game_engine.agents.base import AvalonAgent, RuleBasedAgent
+from game_engine.agents.llm import LLMAgent
 
 
 def print_player_info(game: AvalonGame, player_idx: int):
@@ -81,11 +83,25 @@ def print_game_state(game: AvalonGame):
     print("\n")
 
 
-def run_simple_game():
-    """Run a simple example game with automatic/random choices"""
+def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None):
+    """
+    Run a simple example game with the specified agent type.
+    
+    Args:
+        agent_type: Type of agent to use (RuleBasedAgent or LLMAgent)
+        model_name: Name of the LLM model to use (only for LLMAgent)
+    """
     # Create a game with 5 players
     player_names = ["Alice", "Bob", "Charlie", "Dave", "Eve"]
     game = AvalonGame(player_names)
+    
+    # Create agents for each player
+    agents = {}
+    for player in game.players:
+        if agent_type == LLMAgent and model_name:
+            agents[player] = LLMAgent(player, model_name)
+        else:
+            agents[player] = agent_type(player)
     
     # Generate a game ID and setup logging
     game_id = generate_game_id()
@@ -93,11 +109,13 @@ def run_simple_game():
     
     print(f"Starting a new game with ID: {game_id}")
     print(f"Players: {', '.join(player_names)}")
+    print(f"Agent type: {agent_type.__name__}")
     
     # Log game setup
     log_game_event(logger, "game_setup", {
         "players": player_names,
-        "player_count": game.player_count
+        "player_count": game.player_count,
+        "agent_type": agent_type.__name__
     })
     
     # Show each player their role
@@ -109,19 +127,15 @@ def run_simple_game():
     
     # Main game loop
     while not game.is_game_over():
-        # wait for user to press enter key before proceeding
-        #input("Press Enter to continue...")
-
         print_game_state(game)
         
         if game.phase == GamePhase.TEAM_BUILDING:
             # Current leader proposes a team
             leader = game.get_current_leader()
             quest = game.get_current_quest()
-            team_size = quest.required_team_size
             
-            # Randomly select team members
-            team = random.sample(game.players, team_size)
+            # Use agent to propose team
+            team = agents[leader].propose_team(game)
             
             print(f"{leader.name} proposes a team: {', '.join(player.name for player in team)}")
             game.propose_team(leader, team)
@@ -137,20 +151,11 @@ def run_simple_game():
             # All players vote on the proposed team
             print("\nVoting on the proposed team:")
             votes = {}
+            proposed_team = game.get_current_quest().team
             
             for player in game.players:
-                # Simple strategy: good players are more likely to approve teams with more good players
-                # Evil players are more likely to approve teams with more evil players
-                team = game.get_current_quest().team
-                good_count = sum(1 for p in team if p.team == Team.GOOD)
-                evil_count = len(team) - good_count
-                
-                if player.team == Team.GOOD:
-                    approve_probability = 0.5 + (good_count / len(team)) * 0.3
-                else:
-                    approve_probability = 0.4 + (evil_count / len(team)) * 0.4
-                
-                vote = VoteType.APPROVE if random.random() < approve_probability else VoteType.REJECT
+                # Use agent to decide vote
+                vote = agents[player].vote_for_team(game, proposed_team)
                 votes[player] = vote
                 
                 print(f"  {player.name} votes: {vote.value}")
@@ -173,14 +178,8 @@ def run_simple_game():
             quest_votes = {}
             
             for player in team:
-                # Simple strategy: good players always vote success, evil players sometimes fail
-                if player.team == Team.GOOD:
-                    vote = VoteType.SUCCESS
-                else:
-                    # Evil players might choose to pass a quest for strategic reasons
-                    vote_fail_probability = 0.7  # 70% chance to fail the quest
-                    vote = VoteType.FAIL if random.random() < vote_fail_probability else VoteType.SUCCESS
-                
+                # Use agent to decide quest vote
+                vote = agents[player].vote_on_quest(game)
                 quest_votes[player] = vote
                 game.vote_on_quest(player, vote)
             
@@ -363,5 +362,10 @@ def run_multiple_games(num_games: int = 100):
         print(f"Evil players successfully sabotaged when on quest: {evil_success_rate:.1f}%")
 
 if __name__ == "__main__":
-    # Change this to run_simple_game() if you want to run a single game
-    run_multiple_games(100)
+    # Run a single game with rule-based agents
+    print("Running a game with rule-based agents...")
+    run_simple_game(RuleBasedAgent)
+    
+    # Run a single game with LLM agents (commented out until LLM integration is complete)
+    # print("\nRunning a game with LLM agents...")
+    # run_simple_game(LLMAgent, model_name="gpt-3.5-turbo")
