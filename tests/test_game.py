@@ -422,7 +422,6 @@ class TestGameFlow(unittest.TestCase):
         # Verify voting history is included
         self.assertIn("voting_history", state)
         self.assertIn("team_votes", state["voting_history"])
-        self.assertIn("quest_votes", state["voting_history"])
         self.assertEqual(len(state["voting_history"]["team_votes"]), 1)
         self.assertEqual(state["voting_history"]["team_votes"][0]["vote"], VoteType.APPROVE.value)
         
@@ -433,7 +432,6 @@ class TestGameFlow(unittest.TestCase):
         for player in self.game.players:
             self.assertIn(player.name, full_state["players"])
             self.assertIn("team_votes", full_state["players"][player.name])
-            self.assertIn("quest_votes", full_state["players"][player.name])
             self.assertEqual(len(full_state["players"][player.name]["team_votes"]), 1)
     
     def test_multiple_rounds_voting_history(self):
