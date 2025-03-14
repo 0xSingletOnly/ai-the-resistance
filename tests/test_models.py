@@ -2,19 +2,69 @@
 Tests for the models module of the Avalon game engine.
 """
 import unittest
+from typing import List
 from game_engine.enums import Role, Team, VoteType, QuestResult
-from game_engine.models import Player, Quest
+from game_engine.models import Player, Quest, TeamVoteRecord, QuestVoteRecord
+
+
+class TestVoteRecords(unittest.TestCase):
+    """Test cases for the vote record data classes."""
+    
+    def test_team_vote_record_immutable(self):
+        """Test that TeamVoteRecord is immutable."""
+        record = TeamVoteRecord(
+            quest_number=1,
+            leader="Alice",
+            proposed_team=["Alice", "Bob"],
+            vote=VoteType.APPROVE
+        )
+        with self.assertRaises(AttributeError):
+            record.vote = VoteType.REJECT
+    
+    def test_quest_vote_record_immutable(self):
+        """Test that QuestVoteRecord is immutable."""
+        record = QuestVoteRecord(
+            quest_number=1,
+            team=["Alice", "Bob"],
+            vote=VoteType.SUCCESS
+        )
+        with self.assertRaises(AttributeError):
+            record.vote = VoteType.FAIL
 
 
 class TestPlayer(unittest.TestCase):
     """Test cases for the Player class."""
     
+    def test_player_initialization_validation(self):
+        """Test player initialization with invalid inputs."""
+        with self.assertRaises(ValueError):
+            Player("")  # Empty name
+        with self.assertRaises(ValueError):
+            Player(None)  # None name
+        with self.assertRaises(ValueError):
+            Player(123)  # Non-string name
+    
     def test_player_initialization(self):
-        """Test player initialization."""
+        """Test valid player initialization."""
         player = Player("Alice")
         self.assertEqual(player.name, "Alice")
         self.assertIsNone(player.role)
         self.assertIsNone(player.team)
+        self.assertEqual(player.team_vote_history, [])
+        self.assertEqual(player.quest_vote_history, [])
+    
+    def test_assign_role_validation(self):
+        """Test role assignment validation."""
+        player = Player("Bob")
+        
+        # Test invalid role type
+        with self.assertRaises(ValueError):
+            player.assign_role("MERLIN")  # String instead of Role enum
+        
+        # Test reassignment
+        player.assign_role(Role.MERLIN)
+        with self.assertRaises(ValueError):
+            player.assign_role(Role.ASSASSIN)
     
     def test_assign_good_role(self):
         """Test assigning a good role to a player."""
@@ -193,6 +243,80 @@ class TestPlayer(unittest.TestCase):
         self.assertEqual(record.quest_number, 1)
         self.assertEqual(record.team, ["Alice", "Bob", "Charlie"])
         self.assertEqual(record.vote, VoteType.SUCCESS)
+    
+    def test_add_team_vote_validation(self):
+        """Test team vote validation."""
+        player = Player("Charlie")
+        
+        # Test invalid vote type
+        with self.assertRaises(ValueError):
+            player.add_team_vote(
+                vote=VoteType.SUCCESS,  # Invalid for team vote
+                quest_number=1,
+                leader="Bob",
+                proposed_team=["Bob", "Charlie"]
+            )
+        
+        # Test invalid quest number
+        with self.assertRaises(ValueError):
+            player.add_team_vote(
+                vote=VoteType.APPROVE,
+                quest_number=0,  # Invalid quest number
+                leader="Bob",
+                proposed_team=["Bob", "Charlie"]
+            )
+    
+    def test_add_quest_vote_validation(self):
+        """Test quest vote validation."""
+        player = Player("Dave")
+        
+        # Test invalid vote type
+        with self.assertRaises(ValueError):
+            player.add_quest_vote(
+                vote=VoteType.APPROVE,  # Invalid for quest vote
+                quest_number=1,
+                team=["Bob", "Dave"]
+            )
+        
+        # Test invalid quest number
+        with self.assertRaises(ValueError):
+            player.add_quest_vote(
+                vote=VoteType.SUCCESS,
+                quest_number=-1,  # Invalid quest number
+                team=["Bob", "Dave"]
+            )
+    
+    def test_voting_summary(self):
+        """Test voting summary generation."""
+        player = Player("Eve")
+        
+        # Add some team votes
+        player.add_team_vote(VoteType.APPROVE, 1, "Alice", ["Alice", "Eve"])
+        player.add_team_vote(VoteType.REJECT, 1, "Bob", ["Bob", "Charlie"])
+        player.add_team_vote(VoteType.APPROVE, 2, "Dave", ["Dave", "Eve"])
+        
+        # Add some quest votes
+        player.add_quest_vote(VoteType.SUCCESS, 1, ["Alice", "Eve"])
+        player.add_quest_vote(VoteType.FAIL, 2, ["Dave", "Eve"])
+        
+        summary = player.get_voting_summary()
+        self.assertEqual(summary["team_votes"]["approve"], 2)
+        self.assertEqual(summary["team_votes"]["reject"], 1)
+        self.assertEqual(summary["team_votes"]["total"], 3)
+        self.assertEqual(summary["quest_votes"]["success"], 1)
+        self.assertEqual(summary["quest_votes"]["fail"], 1)
+        self.assertEqual(summary["quest_votes"]["total"], 2)
+    
+    def test_player_equality(self):
+        """Test player equality and hashing."""
+        player1 = Player("Frank")
+        player2 = Player("Frank")
+        player3 = Player("Grace")
+        
+        self.assertEqual(player1, player2)
+        self.assertNotEqual(player1, player3)
+        self.assertEqual(hash(player1), hash(player2))
+        self.assertNotEqual(hash(player1), hash(player3))
 
 
 class TestQuest(unittest.TestCase):
@@ -312,6 +436,54 @@ class TestQuest(unittest.TestCase):
         
         result = quest.process_result()
         self.assertEqual(result, QuestResult.SUCCESS)  # Only 1 fail, but 2 required to fail
+    
+    def test_quest_initialization_validation(self):
+        """Test quest initialization with invalid parameters."""
+        with self.assertRaises(ValueError):
+            Quest(0, 3, 1)  # Invalid quest number
+        with self.assertRaises(ValueError):
+            Quest(1, 0, 1)  # Invalid team size
+        with self.assertRaises(ValueError):
+            Quest(1, 3, 0)  # Invalid fails required
+        with self.assertRaises(ValueError):
+            Quest(1, 3, 4)  # Fails required > team size
+    
+    def test_set_team_validation(self):
+        """Test team setting validation."""
+        # Test wrong team size
+        with self.assertRaises(ValueError):
+            self.quest.set_team(self.team_members[:2], self.leader)
+        
+        # Test duplicate players
+        duplicate_team = [self.team_members[0], self.team_members[0], self.team_members[1]]
+        with self.assertRaises(ValueError):
+            self.quest.set_team(duplicate_team, self.leader)
+    
+    def test_vote_processing_validation(self):
+        """Test vote processing validation."""
+        self.quest.set_team(self.team_members, self.leader)
+        
+        # Try to process result before all votes are in
+        self.quest.add_vote(self.team_members[0], VoteType.SUCCESS)
+        self.quest.add_vote(self.team_members[1], VoteType.SUCCESS)
+        
+        with self.assertRaises(ValueError):
+            self.quest.process_result()
+    
+    def test_quest_string_representation(self):
+        """Test quest string representation."""
+        quest = Quest(1, 3, 1)
+        self.assertIn("Not Started", str(quest))
+        
+        # After setting team
+        quest.set_team(self.team_members, self.leader)
+        self.assertIn("Team Proposed", str(quest))
+        
+        # After completion
+        for player in self.team_members:
+            quest.add_vote(player, VoteType.SUCCESS)
+        quest.process_result()
+        self.assertIn("Complete - Success", str(quest))
 
 
 if __name__ == "__main__":
