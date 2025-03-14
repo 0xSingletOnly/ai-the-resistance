@@ -109,7 +109,7 @@ class RuleBasedAgent(AvalonAgent):
             approve_probability = 0.3  # Base probability
             if has_evil:
                 approve_probability += 0.4  # Much more likely if evil players present
-            approve_probability += game.failed_votes_count * 0.1  # More likely as rejections increase
+            approve_probability -= game.failed_votes_count * 0.1  # More unlikely as rejections increase
             
             return VoteType.APPROVE if random.random() < approve_probability else VoteType.REJECT
     
