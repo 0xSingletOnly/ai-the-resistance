@@ -4,6 +4,7 @@ A simple example that demonstrates the use of the Avalon game engine with both r
 import sys
 import os
 import random
+import asyncio
 from typing import List, Dict, Type, Optional
 from collections import defaultdict
 
@@ -86,6 +87,43 @@ def print_game_state(game: AvalonGame):
     print("\n")
 
 
+async def gather_team_votes(agents, game, proposed_team):
+    """Gather team votes concurrently."""
+    async_agents = [agent for agent in agents.values() if isinstance(agent, LLMAgent)]
+    regular_agents = [agent for agent in agents.values() if not isinstance(agent, LLMAgent)]
+    
+    # Gather votes from async agents concurrently
+    async_votes = {}
+    if async_agents:
+        votes_coros = [agent.vote_for_team_async(game, proposed_team) for agent in async_agents]
+        async_vote_results = await asyncio.gather(*votes_coros)
+        async_votes = dict(zip(async_agents, async_vote_results))
+    
+    # Get votes from regular agents
+    regular_votes = {agent: agent.vote_for_team(game, proposed_team) for agent in regular_agents}
+    
+    # Combine all votes
+    return {**async_votes, **regular_votes}
+
+async def gather_quest_votes(agents, game, team):
+    """Gather quest votes concurrently."""
+    async_agents = [agent for agent in agents.values() if isinstance(agent, LLMAgent)]
+    regular_agents = [agent for agent in agents.values() if not isinstance(agent, LLMAgent)]
+    
+    # Gather votes from async agents concurrently
+    async_votes = {}
+    if async_agents:
+        votes_coros = [agent.vote_on_quest_async(game) for agent in async_agents]
+        async_vote_results = await asyncio.gather(*votes_coros)
+        async_votes = dict(zip(async_agents, async_vote_results))
+    
+    # Get votes from regular agents
+    regular_votes = {agent: agent.vote_on_quest(game) for agent in regular_agents}
+    
+    # Combine all votes and map back to players
+    agent_to_player = {agent: player for player, agent in agents.items()}
+    return {agent_to_player[agent]: vote for agent, vote in {**async_votes, **regular_votes}.items()}
+
 def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None):
     """
     Run a simple example game with the specified agent type.
@@ -154,24 +192,18 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
             })
             
         elif game.phase == GamePhase.TEAM_VOTING:
-            # All players vote on the proposed team
+            # All players vote on the proposed team concurrently
             print("\nVoting on the proposed team:")
-            votes = {}
             proposed_team = game.get_current_quest().team
             
-            for player in game.players:
-                # Use agent to decide vote
-                vote = agents[player].vote_for_team(game, proposed_team)
-                votes[player] = vote
-                
+            # Gather all votes concurrently using asyncio
+            votes = asyncio.run(gather_team_votes(agents, game, proposed_team))
+            
+            # Process all votes after collection
+            for agent, vote in votes.items():
+                player = agent.player
                 print(f"  {player.name} votes: {vote.value}")
                 game.vote_for_team(player, vote)
-            
-            # Log team votes
-            log_game_event(logger, "team_votes", {
-                "votes": {player.name: vote.value for player, vote in votes.items()},
-                "quest_number": game.current_quest_idx + 1
-            })
             
         elif game.phase == GamePhase.QUEST:
             # Team members go on the quest
@@ -180,13 +212,12 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
             
             print(f"\nTeam {', '.join(player.name for player in team)} goes on Quest {game.current_quest_idx + 1}")
             
-            # Each team member votes on the quest
-            quest_votes = {}
+            # Gather all quest votes from players participating in quest concurrently using asyncio
+            agents_in_quest = {player: agents[player] for player in team}
+            quest_votes = asyncio.run(gather_quest_votes(agents_in_quest, game, team))
             
-            for player in team:
-                # Use agent to decide quest vote
-                vote = agents[player].vote_on_quest(game)
-                quest_votes[player] = vote
+            # Process all votes after collection
+            for player, vote in quest_votes.items():
                 game.vote_on_quest(player, vote)
             
             # Determine the result
@@ -391,4 +422,4 @@ if __name__ == "__main__":
     
     # Run a single game with LLM agents (commented out until LLM integration is complete)
     print("\nRunning a game with LLM agents...")
-    run_simple_game(LLMAgent, model_name="deepseek-reasoner")
+    run_simple_game(LLMAgent, model_name="deepseek-chat")   

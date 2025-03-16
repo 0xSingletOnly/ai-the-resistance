@@ -2,10 +2,11 @@
 LLM-based agent implementation for The Resistance: Avalon.
 """
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AsyncOpenAI
 from typing import List, Dict, Optional
 import json
 import os
+import asyncio
 
 from ..enums import Team, Role, VoteType, GamePhase
 from ..models import Player, Quest
@@ -13,7 +14,7 @@ from ..game import AvalonGame
 from .base import AvalonAgent
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
+client = AsyncOpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
 
 class LLMAgent(AvalonAgent):
     """
@@ -78,19 +79,20 @@ Remember:
 4. Maintain your role's secrecy while achieving your team's objectives
 """
 
-    def _get_llm_response(self, prompt: str) -> str:
-        """
-        Get a response from the language model.
-        This is a placeholder - implement actual LLM API call here.
-        """
-        response = client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            stream=False
-        )
-        return response.choices[0].message.content
+    async def _get_llm_response_async(self, prompt: str) -> str:
+        """Get a response from the language model asynchronously."""
+        try:
+            response = await client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                stream=False
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"LLM API call failed: {e}")
+            return "FALLBACK"
 
     def propose_team(self, game: AvalonGame) -> List[Player]:
         """Use LLM to propose a quest team based on game state and strategy."""
@@ -98,7 +100,8 @@ Remember:
         prompt += f"\nYou need to propose a team of {game.get_current_quest().required_team_size} players for the current quest."
         prompt += "\nProvide your chosen team as a JSON list of player names."
         
-        response = self._get_llm_response(prompt)
+        # Run async API call in sync context
+        response = asyncio.run(self._get_llm_response_async(prompt))
         if response == "FALLBACK":
             # Fallback to rule-based behavior
             from .base import RuleBasedAgent
@@ -114,47 +117,59 @@ Remember:
             from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).propose_team(game)
 
-    def vote_for_team(self, game: AvalonGame, proposed_team: List[Player]) -> VoteType:
-        """Use LLM to decide whether to approve or reject a proposed team."""
+    async def vote_for_team_async(self, game: AvalonGame, proposed_team: List[Player]) -> VoteType:
+        """Async version of vote_for_team."""
         prompt = self._get_game_state_prompt(game)
         prompt += f"\nProposed team: {[p.name for p in proposed_team]}"
         prompt += "\nShould you approve (APPROVE) or reject (REJECT) this team? Respond with exactly one of these options."
         
-        response = self._get_llm_response(prompt)
+        response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
-            print(f"Used rule-based behavior to vote for team: {[p.name for p in proposed_team]}")
             from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).vote_for_team(game, proposed_team)
         
-        print(f"Used LLM to vote for team: {[p.name for p in proposed_team]}, {response.strip().upper()}")
+        try:
+            response = response.strip().split()[0].upper()
+            print(f"{self.player.name}, who is {self.player.role}, used LLM to vote for team: {[p.name for p in proposed_team]}, {response.strip().upper()}")
+        except:
+            response = "REJECT"
+            print(f"LLM failed to vote for team, defaulting to REJECT")
+        
         return VoteType.APPROVE if response.strip().upper() == "APPROVE" else VoteType.REJECT
 
-    def vote_on_quest(self, game: AvalonGame) -> VoteType:
-        """Use LLM to decide whether to succeed or fail a quest."""
+    def vote_for_team(self, game: AvalonGame, proposed_team: List[Player]) -> VoteType:
+        """Synchronous wrapper for vote_for_team_async."""
+        return asyncio.run(self.vote_for_team_async(game, proposed_team))
+
+    async def vote_on_quest_async(self, game: AvalonGame) -> VoteType:
+        """Async version of vote_on_quest."""
         if self.player.team == Team.GOOD:
             return VoteType.SUCCESS  # Good players must succeed
         
         prompt = self._get_game_state_prompt(game)
         prompt += "\nAs an evil player, should you succeed (SUCCESS) or fail (FAIL) this quest? Respond with exactly one of these options."
         
-        response = self._get_llm_response(prompt)
+        response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
-            print(f"Used rule-based behavior to vote on quest")
             from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).vote_on_quest(game)
         
         print(f"Used LLM to vote on quest: {response.strip().upper()}")
         return VoteType.FAIL if response.strip().upper() == "FAIL" else VoteType.SUCCESS
 
-    def choose_assassination_target(self, game: AvalonGame) -> Player:
-        """Use LLM to choose which player to assassinate as Merlin."""
+    def vote_on_quest(self, game: AvalonGame) -> VoteType:
+        """Synchronous wrapper for vote_on_quest_async."""
+        return asyncio.run(self.vote_on_quest_async(game))
+
+    async def choose_assassination_target_async(self, game: AvalonGame) -> Player:
+        """Async version of choose_assassination_target."""
         if self.player.role != Role.ASSASSIN:
             raise ValueError("Only the Assassin can choose assassination targets")
         
         prompt = self._get_game_state_prompt(game)
         prompt += "\nAs the Assassin, which player do you think is Merlin? Respond with exactly one player name."
         
-        response = self._get_llm_response(prompt)
+        response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
             from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).choose_assassination_target(game)
@@ -167,3 +182,7 @@ Remember:
         # Fallback to rule-based behavior if target not found
         from .base import RuleBasedAgent
         return RuleBasedAgent(self.player).choose_assassination_target(game)
+
+    def choose_assassination_target(self, game: AvalonGame) -> Player:
+        """Synchronous wrapper for choose_assassination_target_async."""
+        return asyncio.run(self.choose_assassination_target_async(game))
