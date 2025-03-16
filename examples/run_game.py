@@ -387,8 +387,8 @@ if __name__ == "__main__":
     # Run a single game with rule-based agents
     print("Running a game with rule-based agents...")
     # run_simple_game(RuleBasedAgent)
-    run_multiple_games(num_games=100, agent_type=RuleBasedAgent)
+    #run_multiple_games(num_games=100, agent_type=RuleBasedAgent)
     
     # Run a single game with LLM agents (commented out until LLM integration is complete)
-    # print("\nRunning a game with LLM agents...")
-    # run_simple_game(LLMAgent, model_name="gpt-3.5-turbo")
+    print("\nRunning a game with LLM agents...")
+    run_simple_game(LLMAgent, model_name="deepseek-reasoner")

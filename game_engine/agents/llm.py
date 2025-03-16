@@ -1,19 +1,26 @@
 """
 LLM-based agent implementation for The Resistance: Avalon.
 """
+from dotenv import load_dotenv
+from openai import OpenAI
 from typing import List, Dict, Optional
 import json
+import os
+
 from ..enums import Team, Role, VoteType, GamePhase
 from ..models import Player, Quest
 from ..game import AvalonGame
 from .base import AvalonAgent
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
 
 class LLMAgent(AvalonAgent):
     """
     LLM-based agent that uses language models for decision making.
     """
     
-    def __init__(self, player: Player, model_name: str = "gpt-3.5-turbo"):
+    def __init__(self, player: Player, model_name: str = "deepseek-chat"):
         super().__init__(player)
         self.model_name = model_name
         self.conversation_history = []
@@ -32,6 +39,7 @@ class LLMAgent(AvalonAgent):
                 }
             },
             "game_state": {
+                "players": [p.name for p in game.players],
                 "phase": game.phase.value,
                 "current_quest": game.current_quest_idx + 1,
                 "succeeded_quests": game.succeeded_quests,
@@ -75,9 +83,14 @@ Remember:
         Get a response from the language model.
         This is a placeholder - implement actual LLM API call here.
         """
-        # TODO: Implement actual LLM API call
-        # For now, fall back to rule-based behavior
-        return "FALLBACK"
+        response = client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            stream=False
+        )
+        return response.choices[0].message.content
 
     def propose_team(self, game: AvalonGame) -> List[Player]:
         """Use LLM to propose a quest team based on game state and strategy."""
@@ -93,8 +106,10 @@ Remember:
         
         try:
             team_names = json.loads(response)
+            print(f"Used LLM to propose team: {team_names}")
             return [p for p in game.players if p.name in team_names]
         except:
+            print(f"LLM failed to propose team, falling back to rule-based behavior")
             # Fallback to rule-based behavior on error
             from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).propose_team(game)
@@ -107,9 +122,11 @@ Remember:
         
         response = self._get_llm_response(prompt)
         if response == "FALLBACK":
+            print(f"Used rule-based behavior to vote for team: {[p.name for p in proposed_team]}")
             from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).vote_for_team(game, proposed_team)
         
+        print(f"Used LLM to vote for team: {[p.name for p in proposed_team]}, {response.strip().upper()}")
         return VoteType.APPROVE if response.strip().upper() == "APPROVE" else VoteType.REJECT
 
     def vote_on_quest(self, game: AvalonGame) -> VoteType:
@@ -122,9 +139,11 @@ Remember:
         
         response = self._get_llm_response(prompt)
         if response == "FALLBACK":
+            print(f"Used rule-based behavior to vote on quest")
             from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).vote_on_quest(game)
         
+        print(f"Used LLM to vote on quest: {response.strip().upper()}")
         return VoteType.FAIL if response.strip().upper() == "FAIL" else VoteType.SUCCESS
 
     def choose_assassination_target(self, game: AvalonGame) -> Player:
