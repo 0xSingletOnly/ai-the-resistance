@@ -158,7 +158,7 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
             return RuleBasedAgent(self.player).propose_team(game)
         
         try:
-            team_names = json.loads(re.search(r'```json\n(.*)\n```', response, re.DOTALL).group(1))
+            team_names = json.loads(response)
             self._log_llm_response("PROPOSE_TEAM", prompt, response)
             return [p for p in game.players if p.name in team_names]
         except:
