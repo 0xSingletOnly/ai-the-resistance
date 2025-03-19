@@ -331,19 +331,13 @@ def run_single_batch(batch_size: int, batch_num: int, agent_type: Type[AvalonAge
         }
     }
     
-    # Disable logging
-    root_logger = logging.getLogger()
-    original_level = root_logger.level
-    root_logger.setLevel(logging.CRITICAL)  # Only show critical errors
-    
     try:
         for game_num in range(batch_size):
             print(f"Starting game {game_num + 1} in batch {batch_num}...")
             # Temporarily disable printing for game execution
-            # def silent_print(*args, **kwargs):
-            #     pass
-            # original_print = print
-            # builtins.print = silent_print
+            def silent_print(*args, **kwargs):
+                pass
+            builtins.print = silent_print
             
             # Run the game
             game = run_simple_game(agent_type, model_name)
@@ -376,8 +370,6 @@ def run_single_batch(batch_size: int, batch_num: int, agent_type: Type[AvalonAge
                                 if player.team == Team.EVIL and vote == VoteType.FAIL:
                                     stats["evil_deception_success"]["total_evil_on_quests"] += 1
     finally:
-        # Restore normal logging
-        root_logger.setLevel(original_level)
         print(f"Completed batch {batch_num} ({batch_size} games)")
     
     return stats
@@ -500,8 +492,8 @@ if __name__ == "__main__":
     # run_simple_game(RuleBasedAgent)
     
     # Run a single game with LLM agents
-    print("\nRunning a game with LLM agents...")
-    run_simple_game(LLMAgent, model_name="deepseek-chat")   
+    # print("\nRunning a game with LLM agents...")
+    # run_simple_game(LLMAgent, model_name="deepseek-chat")   
 
     # Run multiple games in batches with LLM agents
-    # run_multiple_games(num_games=1, agent_type=LLMAgent, model_name="deepseek-chat", batch_size=1)
+    run_multiple_games(num_games=4, agent_type=LLMAgent, model_name="deepseek-chat", batch_size=2)
