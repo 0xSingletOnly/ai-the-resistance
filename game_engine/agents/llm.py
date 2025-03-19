@@ -26,7 +26,8 @@ log_file = log_dir / f"llm_responses_{datetime.datetime.now().strftime('%Y%m%d_%
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-client = AsyncOpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
+
+client = AsyncOpenAI(api_key=os.getenv("QWEN_API_KEY"), base_url=os.getenv("QWEN_API_BASE_URL"))
 
 class LLMAgent(AvalonAgent):
     """
@@ -135,6 +136,7 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
                 ],
                 stream=False
             )
+
             return response.choices[0].message.content
         except Exception as e:
             print(f"LLM API call failed: {e}")
