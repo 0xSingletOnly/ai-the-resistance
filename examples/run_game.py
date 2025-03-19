@@ -1,10 +1,13 @@
 """
 A simple example that demonstrates the use of the Avalon game engine with both rule-based and LLM agents.
 """
+import builtins
 import sys
+import logging
 import os
 import random
 import asyncio
+import multiprocessing
 from typing import List, Dict, Type, Optional
 from collections import defaultdict
 
@@ -301,13 +304,17 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     return game
 
 
-def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None):
-    """Run multiple games and collect statistics by running run_simple_game multiple times
+def run_single_batch(batch_size: int, batch_num: int, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None) -> Dict:
+    print(f"Starting batch {batch_num} ({batch_size} games)...")
+    """Run a batch of games and collect statistics
     
     Args:
-        num_games: Number of games to run
+        batch_size: Number of games to run in this batch
         agent_type: Type of agent to use (RuleBasedAgent or LLMAgent)
         model_name: Name of the LLM model to use (only for LLMAgent)
+        
+    Returns:
+        Dict containing statistics for this batch of games
     """
     stats = {
         "wins": defaultdict(int),
@@ -316,7 +323,7 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
             "assassinated_merlin": 0,
             "failed_team_proposals": 0
         },
-        "total_games": num_games,
+        "total_games": batch_size,
         "evil_deception_success": {
             "total_evil_on_quests": 0,
             "total_evil_proposed": 0,
@@ -324,28 +331,23 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
         }
     }
     
-    print(f"Running {num_games} games with {agent_type.__name__}...")
-    
-    # Temporarily disable printing and logging in run_simple_game
-    def silent_print(*args, **kwargs):
-        pass
-    
-    original_print = print
-    import builtins
-    builtins.print = silent_print
-    
     # Disable logging
-    import logging
     root_logger = logging.getLogger()
     original_level = root_logger.level
     root_logger.setLevel(logging.CRITICAL)  # Only show critical errors
     
     try:
-        for game_num in range(num_games):
-            # Create a game with 5 players
+        for game_num in range(batch_size):
+            print(f"Starting game {game_num + 1} in batch {batch_num}...")
+            # Temporarily disable printing for game execution
+            # def silent_print(*args, **kwargs):
+            #     pass
+            # original_print = print
+            # builtins.print = silent_print
+            
+            # Run the game
             game = run_simple_game(agent_type, model_name)
             
-            # Collect statistics from the game
             winner = game.get_winner()
             stats["wins"][winner.value] += 1
             
@@ -373,17 +375,95 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
                             for player, vote in quest.in_quest_votes.items():
                                 if player.team == Team.EVIL and vote == VoteType.FAIL:
                                     stats["evil_deception_success"]["total_evil_on_quests"] += 1
-            
-            if (game_num + 1) % 10 == 0:
-                # Temporarily restore print for progress updates
-                builtins.print = original_print
-                print(f"Completed {game_num + 1} games...")
-                builtins.print = silent_print
-    
     finally:
-        # Restore normal printing and logging
-        builtins.print = original_print
+        # Restore normal logging
         root_logger.setLevel(original_level)
+        print(f"Completed batch {batch_num} ({batch_size} games)")
+    
+    return stats
+
+def merge_stats(stats_list: List[Dict]) -> Dict:
+    """Merge multiple stats dictionaries into one
+    
+    Args:
+        stats_list: List of stats dictionaries to merge
+        
+    Returns:
+        Dict containing merged statistics
+    """
+    merged = {
+        "wins": defaultdict(int),
+        "evil_wins_by": {
+            "failed_quests": 0,
+            "assassinated_merlin": 0,
+            "failed_team_proposals": 0
+        },
+        "total_games": 0,
+        "evil_deception_success": {
+            "total_evil_on_quests": 0,
+            "total_evil_proposed": 0,
+            "total_evil_opportunities": 0
+        }
+    }
+    
+    for stats in stats_list:
+        # Merge wins
+        for team, wins in stats["wins"].items():
+            merged["wins"][team] += wins
+        
+        # Merge evil wins breakdown
+        for key in merged["evil_wins_by"]:
+            merged["evil_wins_by"][key] += stats["evil_wins_by"][key]
+        
+        # Merge total games
+        merged["total_games"] += stats["total_games"]
+        
+        # Merge evil deception metrics
+        for key in merged["evil_deception_success"]:
+            merged["evil_deception_success"][key] += stats["evil_deception_success"][key]
+    
+    return merged
+
+def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None, batch_size: int = 2):
+    """Run multiple games and collect statistics by running run_simple_game multiple times
+    
+    Args:
+        num_games: Number of games to run
+        agent_type: Type of agent to use (RuleBasedAgent or LLMAgent)
+        model_name: Name of the LLM model to use (only for LLMAgent)
+    """
+    """Run multiple games in parallel batches and collect statistics
+    
+    Args:
+        num_games: Total number of games to run
+        agent_type: Type of agent to use (RuleBasedAgent or LLMAgent)
+        model_name: Name of the LLM model to use (only for LLMAgent)
+        batch_size: Number of games to run in each batch
+    """
+    print(f"Running {num_games} games with {agent_type.__name__} in batches of {batch_size}...")
+    
+    # Calculate number of batches
+    num_batches = (num_games + batch_size - 1) // batch_size
+    last_batch_size = num_games % batch_size
+    if last_batch_size == 0:
+        last_batch_size = batch_size
+    
+    # Create batch sizes list
+    batch_sizes = [batch_size] * (num_batches - 1) + [last_batch_size]
+    
+    # Run batches in parallel using multiprocessing
+    with multiprocessing.Pool() as pool:
+        batch_stats = pool.starmap(
+            run_single_batch,
+            [(size, i+1, agent_type, model_name) for i, size in enumerate(batch_sizes)]
+        )
+        
+        # Print final completion summary
+        total_completed = sum(stats["total_games"] for stats in batch_stats)
+        print(f"\nAll batches completed. Total games: {total_completed}/{num_games}")
+    
+    # Merge statistics from all batches
+    stats = merge_stats(batch_stats)
     
     # Print final statistics
     print("\nFinal Statistics:")
@@ -416,10 +496,12 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
 
 if __name__ == "__main__":
     # Run a single game with rule-based agents
-    print("Running a game with rule-based agents...")
+    # print("Running a game with rule-based agents...")
     # run_simple_game(RuleBasedAgent)
-    #run_multiple_games(num_games=100, agent_type=RuleBasedAgent)
     
-    # Run a single game with LLM agents (commented out until LLM integration is complete)
+    # Run a single game with LLM agents
     print("\nRunning a game with LLM agents...")
-    run_simple_game(LLMAgent, model_name="deepseek-chat")   
+    run_simple_game(LLMAgent, model_name="deepseek-reasoner")   
+
+    # Run multiple games in batches with LLM agents
+    # run_multiple_games(num_games=1, agent_type=LLMAgent, model_name="deepseek-chat", batch_size=1)
