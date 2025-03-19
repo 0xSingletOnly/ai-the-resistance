@@ -2,3 +2,4 @@ logs/
 __pycache__/
 game_states/
 .env
+.DS_Store
