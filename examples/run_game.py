@@ -127,7 +127,7 @@ async def gather_quest_votes(agents, game, team):
     agent_to_player = {agent: player for player, agent in agents.items()}
     return {agent_to_player[agent]: vote for agent, vote in {**async_votes, **regular_votes}.items()}
 
-def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None):
+def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None, use_cot: bool = False):
     """
     Run a simple example game with the specified agent type.
     
@@ -146,7 +146,7 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     agents = {}
     for player in game.players:
         if agent_type == LLMAgent and model_name:
-            agents[player] = LLMAgent(player, model_name)
+            agents[player] = LLMAgent(player, model_name, use_cot)
         else:
             agents[player] = agent_type(player)
     
@@ -304,7 +304,7 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     return game
 
 
-def run_single_batch(batch_size: int, batch_num: int, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None) -> Dict:
+def run_single_batch(batch_size: int, batch_num: int, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None, use_cot: bool = False) -> Dict:
     print(f"Starting batch {batch_num} ({batch_size} games)...")
     """Run a batch of games and collect statistics
     
@@ -340,7 +340,7 @@ def run_single_batch(batch_size: int, batch_num: int, agent_type: Type[AvalonAge
             builtins.print = silent_print
             
             # Run the game
-            game = run_simple_game(agent_type, model_name)
+            game = run_simple_game(agent_type, model_name, use_cot)
             
             winner = game.get_winner()
             stats["wins"][winner.value] += 1
@@ -416,7 +416,7 @@ def merge_stats(stats_list: List[Dict]) -> Dict:
     
     return merged
 
-def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None, batch_size: int = 2):
+def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None, use_cot: bool = False, batch_size: int = 2):
     """Run multiple games and collect statistics by running run_simple_game multiple times
     
     Args:
@@ -448,7 +448,7 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
     with multiprocessing.Pool() as pool:
         batch_stats = pool.starmap(
             run_single_batch,
-            [(size, i+1, agent_type, model_name) for i, size in enumerate(batch_sizes)]
+            [(size, i+1, agent_type, model_name, use_cot) for i, size in enumerate(batch_sizes)]
         )
         
         # Print final completion summary
@@ -501,4 +501,4 @@ if __name__ == "__main__":
     # run_simple_game(LLMAgent, model_name="deepseek-chat")   
 
     # Run multiple games in batches with LLM agents
-    run_multiple_games(num_games=4, agent_type=LLMAgent, model_name="deepseek-chat", batch_size=2)
+    run_multiple_games(num_games=50, agent_type=LLMAgent, model_name="deepseek-chat", use_cot=True, batch_size=10)

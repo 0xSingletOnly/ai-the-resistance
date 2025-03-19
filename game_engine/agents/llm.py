@@ -33,7 +33,7 @@ class LLMAgent(AvalonAgent):
     LLM-based agent that uses language models for decision making.
     """
     
-    def __init__(self, player: Player, model_name: str = "deepseek-chat", use_cot: bool = True):
+    def __init__(self, player: Player, model_name: str = "deepseek-chat", use_cot: bool = False):
         super().__init__(player)
         self.model_name = model_name
         self.use_cot = use_cot
@@ -48,6 +48,7 @@ class LLMAgent(AvalonAgent):
             "prompt": prompt,
             "response": response,
             "model": self.model_name,
+            "use_cot": self.use_cot,
         }
         
         # Log to file for training data
