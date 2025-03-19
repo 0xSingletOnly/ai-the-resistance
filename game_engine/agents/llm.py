@@ -102,7 +102,8 @@ Make decisions based on this information and your role's objectives:
 - Good team (Merlin, Percival, Loyal Servants) must succeed 3 quests
 - Evil team (Assassin, Morgana, Minions) must either:
   1. Fail 3 quests, or
-  2. Successfully assassinate Merlin at the end
+  2. Successfully assassinate Merlin at the end or
+  3. Five team proposals are rejected consecutively
 
 Remember:
 1. Only evil players can vote FAIL on quests
