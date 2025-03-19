@@ -3,9 +3,9 @@ A simple example that demonstrates the use of the Avalon game engine with both r
 """
 import builtins
 import sys
-import logging
 import os
 import random
+import time
 import asyncio
 import multiprocessing
 from typing import List, Dict, Type, Optional
@@ -432,6 +432,7 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
         model_name: Name of the LLM model to use (only for LLMAgent)
         batch_size: Number of games to run in each batch
     """
+    start_time = time.time()
     print(f"Running {num_games} games with {agent_type.__name__} in batches of {batch_size}...")
     
     # Calculate number of batches
@@ -485,6 +486,10 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
             print(f"Evil players successfully sabotaged when on quest: {evil_success_rate:.1f}%")
     else:
         print("No quests were completed (all games ended due to failed team proposals)")
+    
+    end_time = time.time()
+    total_time = (end_time - start_time) / 60
+    print(f"\nTotal time taken: {total_time:.2f} minutes")
 
 if __name__ == "__main__":
     # Run a single game with rule-based agents

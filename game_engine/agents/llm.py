@@ -33,9 +33,10 @@ class LLMAgent(AvalonAgent):
     LLM-based agent that uses language models for decision making.
     """
     
-    def __init__(self, player: Player, model_name: str = "deepseek-chat"):
+    def __init__(self, player: Player, model_name: str = "deepseek-chat", use_cot: bool = True):
         super().__init__(player)
         self.model_name = model_name
+        self.use_cot = use_cot
         self.conversation_history = []
         
     def _log_llm_response(self, turn_type: str, prompt: str, response: str):
@@ -92,7 +93,7 @@ class LLMAgent(AvalonAgent):
                 }
                 state["quest_history"].append(quest_info)
         
-        return f"""You are playing The Resistance: Avalon as player {self.player.name}.
+        base_prompt = f"""You are playing The Resistance: Avalon as player {self.player.name}.
 Current game state:
 {json.dumps(state, indent=2)}
 
@@ -108,6 +109,20 @@ Remember:
 3. Most quests fail with 1 FAIL vote (some need 2)
 4. Maintain your role's secrecy while achieving your team's objectives
 """
+
+        if self.use_cot:
+            base_prompt += """
+Before responding, think through these steps internally (but do not include your thought process in the response):
+1. First, analyze the current game state and quest history
+2. Consider your role and team's objectives
+3. Evaluate the information visible to you about other players
+4. Think about how your decision impacts your team's strategy
+5. Make your decision based on this analysis
+
+IMPORTANT: Only provide the final answer in your response, not your reasoning.
+"""
+
+        return base_prompt
 
     async def _get_llm_response_async(self, prompt: str) -> str:
         """Get a response from the language model asynchronously."""
@@ -127,8 +142,10 @@ Remember:
     def propose_team(self, game: AvalonGame) -> List[Player]:
         """Use LLM to propose a quest team based on game state and strategy."""
         prompt = self._get_game_state_prompt(game)
-        prompt += f"\nYou need to propose a team of {game.get_current_quest().required_team_size} players for the current quest."
-        prompt += "\nRepond with only your chosen team as a JSON list of player names."
+        if self.use_cot:
+            prompt += f"\nCarefully analyze which {game.get_current_quest().required_team_size} players to propose for the current quest. Consider the game state and team dynamics in your mind, but respond with only a JSON list of player names."
+        else:
+            prompt += f"\nYou need to propose a team of {game.get_current_quest().required_team_size} players for the current quest.\nRespond with only your chosen team as a JSON list of player names."
         
         # Run async API call in sync context
         response = asyncio.run(self._get_llm_response_async(prompt))
@@ -151,7 +168,10 @@ Remember:
         """Async version of vote_for_team."""
         prompt = self._get_game_state_prompt(game)
         prompt += f"\nProposed team: {[p.name for p in proposed_team]}"
-        prompt += "\nShould you approve (APPROVE) or reject (REJECT) this team? Respond with exactly one of these options."
+        if self.use_cot:
+            prompt += "\nCarefully analyze whether to approve or reject this team. Consider the team composition and game state in your mind, but respond with only APPROVE or REJECT."
+        else:
+            prompt += "\nShould you approve (APPROVE) or reject (REJECT) this team? Respond with exactly one of these options."
         
         response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
@@ -180,7 +200,10 @@ Remember:
             return VoteType.SUCCESS  # Good players must succeed
         
         prompt = self._get_game_state_prompt(game)
-        prompt += "\nAs an evil player, should you succeed (SUCCESS) or fail (FAIL) this quest? Respond with exactly one of these options."
+        if self.use_cot:
+            prompt += "\nAs an evil player, carefully analyze whether you should succeed or fail this quest. Consider the game state and potential consequences in your mind, but respond with only SUCCESS or FAIL."
+        else:
+            prompt += "\nAs an evil player, should you succeed (SUCCESS) or fail (FAIL) this quest? Respond with exactly one of these options."
         
         response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
