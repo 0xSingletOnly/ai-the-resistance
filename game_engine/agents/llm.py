@@ -11,7 +11,7 @@ import asyncio
 from ..enums import Team, Role, VoteType, GamePhase
 from ..models import Player, Quest
 from ..game import AvalonGame
-from .base import AvalonAgent
+from .base import AvalonAgent, RuleBasedAgent
 
 load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
@@ -104,7 +104,6 @@ Remember:
         response = asyncio.run(self._get_llm_response_async(prompt))
         if response == "FALLBACK":
             # Fallback to rule-based behavior
-            from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).propose_team(game)
         
         try:
@@ -114,7 +113,6 @@ Remember:
         except:
             print(f"LLM failed to propose team, falling back to rule-based behavior")
             # Fallback to rule-based behavior on error
-            from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).propose_team(game)
 
     async def vote_for_team_async(self, game: AvalonGame, proposed_team: List[Player]) -> VoteType:
@@ -125,15 +123,14 @@ Remember:
         
         response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
-            from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).vote_for_team(game, proposed_team)
         
         try:
             response = response.strip().split()[0].upper()
-            print(f"{self.player.name}, who is {self.player.role}, used LLM to vote for team: {[p.name for p in proposed_team]}, {response.strip().upper()}")
+            print(f"{self.player.name}, who is {self.player.role}, used LLM to vote for team: {[p.name for p in proposed_team]}, {response.strip()}")
         except:
-            response = "REJECT"
-            print(f"LLM failed to vote for team, defaulting to REJECT")
+            print(f"LLM failed to vote for team, defaulting to rule-based behavior")
+            return RuleBasedAgent(self.player).vote_for_team(game, proposed_team)
         
         return VoteType.APPROVE if response.strip().upper() == "APPROVE" else VoteType.REJECT
 
@@ -151,10 +148,9 @@ Remember:
         
         response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
-            from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).vote_on_quest(game)
         
-        print(f"Used LLM to vote on quest: {response.strip().upper()}")
+        print(f"{self.player.name}, who is {self.player.role}, used LLM to vote on quest: {response.strip()}")
         return VoteType.FAIL if response.strip().upper() == "FAIL" else VoteType.SUCCESS
 
     def vote_on_quest(self, game: AvalonGame) -> VoteType:
@@ -171,17 +167,15 @@ Remember:
         
         response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
-            from .base import RuleBasedAgent
             return RuleBasedAgent(self.player).choose_assassination_target(game)
         
         target_name = response.strip()
         targets = [p for p in game.players if p.name == target_name]
         if targets:
             return targets[0]
-        
-        # Fallback to rule-based behavior if target not found
-        from .base import RuleBasedAgent
-        return RuleBasedAgent(self.player).choose_assassination_target(game)
+        else:
+            print(f"LLM failed to choose assassination target, defaulting to rule-based behavior")
+            return RuleBasedAgent(self.player).choose_assassination_target(game)
 
     def choose_assassination_target(self, game: AvalonGame) -> Player:
         """Synchronous wrapper for choose_assassination_target_async."""
