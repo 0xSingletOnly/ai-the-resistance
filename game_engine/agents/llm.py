@@ -7,13 +7,25 @@ from typing import List, Dict, Optional
 import json
 import os
 import asyncio
+import re
 
 from ..enums import Team, Role, VoteType, GamePhase
 from ..models import Player, Quest
 from ..game import AvalonGame
 from .base import AvalonAgent, RuleBasedAgent
+import logging
+import datetime
+import pathlib
 
 load_dotenv()
+
+# Set up logging
+log_dir = pathlib.Path("logs/llm_responses")
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / f"llm_responses_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 client = AsyncOpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
 
 class LLMAgent(AvalonAgent):
@@ -25,6 +37,24 @@ class LLMAgent(AvalonAgent):
         super().__init__(player)
         self.model_name = model_name
         self.conversation_history = []
+        
+    def _log_llm_response(self, turn_type: str, prompt: str, response: str):
+        """Log LLM response with metadata for training purposes."""
+        log_entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "player_role": self.player.role.value if self.player.role else None,
+            "turn_type": turn_type,
+            "prompt": prompt,
+            "response": response,
+            "model": self.model_name,
+        }
+        
+        # Log to file for training data
+        with open(log_file, 'a') as f:
+            f.write(json.dumps(log_entry) + '\n')
+            
+        # Log to standard logger for system monitoring
+        logger.info(f"LLM response for player {self.player.name}, role {self.player.role.value}, turn type {turn_type}, response: {response}")
     
     def _get_game_state_prompt(self, game: AvalonGame) -> str:
         """Create a detailed prompt describing the current game state."""
@@ -98,20 +128,22 @@ Remember:
         """Use LLM to propose a quest team based on game state and strategy."""
         prompt = self._get_game_state_prompt(game)
         prompt += f"\nYou need to propose a team of {game.get_current_quest().required_team_size} players for the current quest."
-        prompt += "\nProvide your chosen team as a JSON list of player names."
+        prompt += "\nRepond with only your chosen team as a JSON list of player names."
         
         # Run async API call in sync context
         response = asyncio.run(self._get_llm_response_async(prompt))
+        print(f"Response from propose_team is: {response}")
         if response == "FALLBACK":
             # Fallback to rule-based behavior
+            print(f"{self.player.name}, who is {self.player.role}, failed to use LLM to propose team, defaulting to rule-based behavior")
             return RuleBasedAgent(self.player).propose_team(game)
         
         try:
-            team_names = json.loads(response)
-            print(f"Used LLM to propose team: {team_names}")
+            team_names = json.loads(re.search(r'```json\n(.*)\n```', response, re.DOTALL).group(1))
+            self._log_llm_response("PROPOSE_TEAM", prompt, response)
             return [p for p in game.players if p.name in team_names]
         except:
-            print(f"LLM failed to propose team, falling back to rule-based behavior")
+            print(f"{self.player.name}, who is {self.player.role}, failed to use LLM to propose team, falling back to rule-based behavior")
             # Fallback to rule-based behavior on error
             return RuleBasedAgent(self.player).propose_team(game)
 
@@ -123,16 +155,20 @@ Remember:
         
         response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
+            print(f"{self.player.name}, who is {self.player.role}, failed to use LLM to vote for team, defaulting to rule-based behavior")
             return RuleBasedAgent(self.player).vote_for_team(game, proposed_team)
         
         try:
-            response = response.strip().split()[0].upper()
-            print(f"{self.player.name}, who is {self.player.role}, used LLM to vote for team: {[p.name for p in proposed_team]}, {response.strip()}")
-        except:
-            print(f"LLM failed to vote for team, defaulting to rule-based behavior")
+            vote = response.strip().split()[0].upper()
+            if vote not in ["APPROVE", "REJECT"]:
+                raise ValueError(f"Invalid vote: {vote}")
+                
+            self._log_llm_response("VOTE_FOR_TEAM", prompt, response)
+            return VoteType.APPROVE if vote == "APPROVE" else VoteType.REJECT
+            
+        except Exception as e:
+            print(f"{self.player.name}, who is {self.player.role}, failed to parse LLM vote response: {str(e)}, defaulting to rule-based behavior")
             return RuleBasedAgent(self.player).vote_for_team(game, proposed_team)
-        
-        return VoteType.APPROVE if response.strip().upper() == "APPROVE" else VoteType.REJECT
 
     def vote_for_team(self, game: AvalonGame, proposed_team: List[Player]) -> VoteType:
         """Synchronous wrapper for vote_for_team_async."""
@@ -148,9 +184,10 @@ Remember:
         
         response = await self._get_llm_response_async(prompt)
         if response == "FALLBACK":
+            print(f"{self.player.name}, who is {self.player.role}, failed to use LLM to vote on quest, defaulting to rule-based behavior")
             return RuleBasedAgent(self.player).vote_on_quest(game)
         
-        print(f"{self.player.name}, who is {self.player.role}, used LLM to vote on quest: {response.strip()}")
+        self._log_llm_response("VOTE_ON_QUEST", prompt, response)
         return VoteType.FAIL if response.strip().upper() == "FAIL" else VoteType.SUCCESS
 
     def vote_on_quest(self, game: AvalonGame) -> VoteType:
@@ -172,6 +209,7 @@ Remember:
         target_name = response.strip()
         targets = [p for p in game.players if p.name == target_name]
         if targets:
+            self._log_llm_response("ASSASSINATION_TARGET", prompt, response)
             return targets[0]
         else:
             print(f"LLM failed to choose assassination target, defaulting to rule-based behavior")
