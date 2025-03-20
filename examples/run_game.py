@@ -152,7 +152,6 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     # Main game loop
     while not game.is_game_over():
         print_game_state(game)
-        time.sleep(3)
         
         if game.phase == GamePhase.TEAM_BUILDING:
             # Current leader proposes a team
@@ -312,9 +311,9 @@ def run_single_batch(batch_size: int, batch_num: int, agent_type: Type[AvalonAge
         for game_num in range(batch_size):
             print(f"Starting game {game_num + 1} in batch {batch_num}...")
             # Temporarily disable printing for game execution
-            def silent_print(*args, **kwargs):
-                pass
-            builtins.print = silent_print
+            # def silent_print(*args, **kwargs):
+            #     pass
+            # builtins.print = silent_print
             
             # Run the game
             game = run_simple_game(agent_type, model_name, use_cot)
@@ -500,7 +499,7 @@ if __name__ == "__main__":
     # Run a single game with LLM agents
     # print("\nRunning a game with LLM agents...")
     #run_simple_game(LLMAgent, model_name="qwen2.5-7b-instruct")
-    run_multiple_games(num_games=100, agent_type=LLMAgent, model_name="qwen2.5-7b-instruct", use_cot=False) 
+    run_multiple_games(num_games=1, agent_type=LLMAgent, model_name="open-mistral-7b", use_cot=True) 
 
     # Run multiple games in batches with LLM agents
     # run_multiple_games(num_games=50, agent_type=LLMAgent, model_name="deepseek-chat", use_cot=True, batch_size=10)
