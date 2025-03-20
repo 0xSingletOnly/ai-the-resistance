@@ -498,7 +498,7 @@ if __name__ == "__main__":
     
     # Run a single game with LLM agents
     # print("\nRunning a game with LLM agents...")
-    # run_simple_game(LLMAgent, model_name="deepseek-chat")   
+    # run_simple_game(LLMAgent, model_name="deepseek-reasoner")   
 
     # Run multiple games in batches with LLM agents
-    run_multiple_games(num_games=50, agent_type=LLMAgent, model_name="deepseek-chat", use_cot=True, batch_size=10)
+    run_multiple_games(num_games=20, agent_type=LLMAgent, model_name="deepseek-reasoner", use_cot=False, batch_size=4)
