@@ -393,47 +393,71 @@ def merge_stats(stats_list: List[Dict]) -> Dict:
     
     return merged
 
-def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None, use_cot: bool = False, batch_size: int = 2):
-    """Run multiple games and collect statistics by running run_simple_game multiple times
-    
-    Args:
-        num_games: Number of games to run
-        agent_type: Type of agent to use (RuleBasedAgent or LLMAgent)
-        model_name: Name of the LLM model to use (only for LLMAgent)
-    """
-    """Run multiple games in parallel batches and collect statistics
+def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: Optional[str] = None, use_cot: bool = False):
+    """Run multiple games sequentially and collect statistics
     
     Args:
         num_games: Total number of games to run
         agent_type: Type of agent to use (RuleBasedAgent or LLMAgent)
         model_name: Name of the LLM model to use (only for LLMAgent)
-        batch_size: Number of games to run in each batch
+        use_cot: Whether to use chain of thought reasoning (only for LLMAgent)
     """
     start_time = time.time()
-    print(f"Running {num_games} games with {agent_type.__name__} in batches of {batch_size}...")
+    print(f"Running {num_games} games with {agent_type.__name__}...")
     
-    # Calculate number of batches
-    num_batches = (num_games + batch_size - 1) // batch_size
-    last_batch_size = num_games % batch_size
-    if last_batch_size == 0:
-        last_batch_size = batch_size
+    # Initialize statistics
+    stats = {
+        "wins": defaultdict(int),
+        "evil_wins_by": {
+            "failed_quests": 0,
+            "assassinated_merlin": 0,
+            "failed_team_proposals": 0
+        },
+        "total_games": 0,
+        "evil_deception_success": {
+            "total_evil_on_quests": 0,
+            "total_evil_proposed": 0,
+            "total_evil_opportunities": 0
+        }
+    }
     
-    # Create batch sizes list
-    batch_sizes = [batch_size] * (num_batches - 1) + [last_batch_size]
-    
-    # Run batches in parallel using multiprocessing
-    with multiprocessing.Pool() as pool:
-        batch_stats = pool.starmap(
-            run_single_batch,
-            [(size, i+1, agent_type, model_name, use_cot) for i, size in enumerate(batch_sizes)]
-        )
+    # Run games sequentially
+    for game_num in range(num_games):
+        print(f"\nStarting game {game_num + 1}/{num_games}...")
         
-        # Print final completion summary
-        total_completed = sum(stats["total_games"] for stats in batch_stats)
-        print(f"\nAll batches completed. Total games: {total_completed}/{num_games}")
-    
-    # Merge statistics from all batches
-    stats = merge_stats(batch_stats)
+        # Run the game
+        game = run_simple_game(agent_type, model_name, use_cot)
+        
+        # Update statistics
+        winner = game.get_winner()
+        stats["wins"][winner.value] += 1
+        stats["total_games"] += 1
+        
+        # Track how evil team won
+        if winner == Team.EVIL:
+            if game.failed_votes_count >= MAX_FAILED_VOTES:
+                stats["evil_wins_by"]["failed_team_proposals"] += 1
+            elif game.failed_quests >= 3:
+                stats["evil_wins_by"]["failed_quests"] += 1
+            elif game.assassinated_player and game.assassinated_player.role == Role.MERLIN:
+                stats["evil_wins_by"]["assassinated_merlin"] += 1
+        
+        # Only count quests that were actually completed
+        completed_quests = game.succeeded_quests + game.failed_quests
+        for i in range(completed_quests):
+            quest = game.quests[i]
+            if quest.result != QuestResult.NOT_STARTED:  # Only count completed quests
+                if quest.team:
+                    evil_players_proposed = sum(1 for p in quest.team if p.team == Team.EVIL)
+                    stats["evil_deception_success"]["total_evil_proposed"] += evil_players_proposed
+                    stats["evil_deception_success"]["total_evil_opportunities"] += len(quest.team)
+                    
+                    # Count successful sabotage (fail votes by evil players)
+                    if quest.in_quest_votes:
+                        for player, vote in quest.in_quest_votes.items():
+                            if player.team == Team.EVIL and vote == VoteType.FAIL:
+                                stats["evil_deception_success"]["total_evil_on_quests"] += 1
+        
     
     # Print final statistics
     print("\nFinal Statistics:")
@@ -475,8 +499,8 @@ if __name__ == "__main__":
     
     # Run a single game with LLM agents
     # print("\nRunning a game with LLM agents...")
-
-    run_simple_game(LLMAgent, model_name="qwen2.5-7b-instruct")   
+    #run_simple_game(LLMAgent, model_name="qwen2.5-7b-instruct")
+    run_multiple_games(num_games=100, agent_type=LLMAgent, model_name="qwen2.5-7b-instruct", use_cot=False) 
 
     # Run multiple games in batches with LLM agents
     # run_multiple_games(num_games=50, agent_type=LLMAgent, model_name="deepseek-chat", use_cot=True, batch_size=10)
