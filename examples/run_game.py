@@ -497,10 +497,11 @@ if __name__ == "__main__":
     # print("Running a game with rule-based agents...")
     # run_simple_game(RuleBasedAgent)
     
-    # Run a single game with LLM agents
-    # print("\nRunning a game with LLM agents...")
-    #run_simple_game(LLMAgent, model_name="qwen2.5-7b-instruct")
-    run_multiple_games(num_games=100, agent_type=LLMAgent, model_name="qwen2.5-7b-instruct", use_cot=False) 
-
-    # Run multiple games in batches with LLM agents
-    # run_multiple_games(num_games=50, agent_type=LLMAgent, model_name="deepseek-chat", use_cot=True, batch_size=10)
+    # Run multiple games with local Qwen model
+    print("\nRunning games with local Qwen model...")
+    run_multiple_games(
+        num_games=1, 
+        agent_type=LLMAgent, 
+        model_name="qwen2.5-7b-instruct", 
+        use_cot=False
+    )

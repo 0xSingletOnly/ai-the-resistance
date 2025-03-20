@@ -6,8 +6,10 @@ from openai import OpenAI
 from typing import List, Dict, Optional
 import json
 import os
-
+import torch
 import re
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from ..enums import Team, Role, VoteType, GamePhase
 from ..models import Player, Quest
@@ -27,18 +29,39 @@ log_file = log_dir / f"llm_responses_{datetime.datetime.now().strftime('%Y%m%d_%
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=os.getenv("QWEN_API_KEY"), base_url=os.getenv("QWEN_API_BASE_URL"))
+# Initialize Qwen model
+qwen_model = None
+qwen_tokenizer = None
+
+def init_qwen_model():
+    global qwen_model, qwen_tokenizer
+    if qwen_model is None:
+        model_name = "Qwen/Qwen2.5-7B-Instruct"
+        qwen_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype="auto",
+            device_map="mps"
+        )
+        qwen_tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+# Initialize OpenAI-compatible client if environment variables are set
+client = None
+if os.getenv("QWEN_API_KEY") and os.getenv("QWEN_API_BASE_URL"):
+    client = OpenAI(api_key=os.getenv("QWEN_API_KEY"), base_url=os.getenv("QWEN_API_BASE_URL"))
 
 class LLMAgent(AvalonAgent):
     """
     LLM-based agent that uses language models for decision making.
     """
     
-    def __init__(self, player: Player, model_name: str = "deepseek-chat", use_cot: bool = False):
+    def __init__(self, player: Player, model_name: str = "deepseek-chat", use_cot: bool = False, use_local: bool = True):
         super().__init__(player)
         self.model_name = model_name
         self.use_cot = use_cot
+        self.use_local = use_local
         self.conversation_history = []
+        if use_local and model_name == "qwen2.5-7b-instruct":
+            init_qwen_model()
         
     def _log_llm_response(self, turn_type: str, prompt: str, response: str):
         """Log LLM response with metadata for training purposes."""
@@ -130,17 +153,42 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
     def _get_llm_response(self, prompt: str) -> str:
         """Get a response from the language model."""
         try:
-            response = client.chat.completions.create(
-                model=self.model_name,
-                messages=[
+            if self.use_local and self.model_name == "qwen2.5-7b-instruct":
+                # Use local Qwen model
+                messages = [
+                    {"role": "system", "content": "You are an AI playing The Resistance: Avalon. You make strategic decisions based on game state and your role."},
                     {"role": "user", "content": prompt}
-                ],
-                stream=False
-            )
-
-            return response.choices[0].message.content
+                ]
+                text = qwen_tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+                model_inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
+                generated_ids = qwen_model.generate(
+                    **model_inputs,
+                    max_new_tokens=512
+                )
+                generated_ids = [
+                    output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+                ]
+                response = qwen_tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+                return response.strip()
+            elif client is not None:
+                # Use OpenAI-compatible API
+                response = client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    stream=False
+                )
+                return response.choices[0].message.content
+            else:
+                print("No LLM client available")
+                return "FALLBACK"
         except Exception as e:
-            print(f"LLM API call failed: {e}")
+            print(f"LLM call failed: {e}")
             return "FALLBACK"
 
     def propose_team(self, game: AvalonGame) -> List[Player]:
