@@ -498,6 +498,7 @@ if __name__ == "__main__":
     
     # Run a single game with LLM agents
     # print("\nRunning a game with LLM agents...")
+
     run_simple_game(LLMAgent, model_name="qwen2.5-7b-instruct")   
 
     # Run multiple games in batches with LLM agents
