@@ -2,7 +2,10 @@
 LLM-based agent implementation for The Resistance: Avalon.
 """
 from dotenv import load_dotenv
+
 from openai import OpenAI
+from mistralai import Mistral
+
 from typing import List, Dict, Optional
 import json
 import os
@@ -27,7 +30,8 @@ log_file = log_dir / f"llm_responses_{datetime.datetime.now().strftime('%Y%m%d_%
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=os.getenv("QWEN_API_KEY"), base_url=os.getenv("QWEN_API_BASE_URL"))
+oai_client = OpenAI(api_key=os.getenv("QWEN_API_KEY"), base_url=os.getenv("QWEN_API_BASE_URL"))
+client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
 
 class LLMAgent(AvalonAgent):
     """
@@ -130,12 +134,11 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
     def _get_llm_response(self, prompt: str) -> str:
         """Get a response from the language model."""
         try:
-            response = client.chat.completions.create(
+            response = client.chat.complete(
                 model=self.model_name,
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
-                stream=False
             )
 
             return response.choices[0].message.content
@@ -160,6 +163,10 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
         
         try:
             team_names = json.loads(re.search(r'\[(.*?)\]', response).group(0))
+
+            if len(team_names) != game.get_current_quest().required_team_size:
+                raise ValueError(f"Invalid team size: {len(team_names)}. Expected: {game.get_current_quest().required_team_size}")
+
             self._log_llm_response("PROPOSE_TEAM", prompt, response)
             return [p for p in game.players if p.name in team_names]
         except:
