@@ -152,7 +152,7 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     # Main game loop
     while not game.is_game_over():
         print_game_state(game)
-        input("Press Enter to continue...")
+        time.sleep(3)
         
         if game.phase == GamePhase.TEAM_BUILDING:
             # Current leader proposes a team
