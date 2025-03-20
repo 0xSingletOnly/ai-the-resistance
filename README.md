@@ -105,6 +105,23 @@ I picked these two models to keep the cost of inference lower. In addition, I wa
    - Evaluates information visible about other players
    - Assesses impact of decisions on team strategy
 
+   - Some examples of chain-of-thought reasoning include:
+     - Merlin voting on team formation:
+     > As Merlin, I know that Charlie and Dave are Minions of Mordred (evil). The proposed team consists of Alice, Bob, and myself (Eve), all of whom are good. This team composition is safe and likely to succeed, as there are no evil players on the team who could sabotage the quest. Approving this team aligns with the Good team's objective of completing three successful quests.
+     - Assassin voting on a quest:
+     > 1. **Role and Objective:** As the Assassin, my primary objective is to ensure the Evil team's victory. This can be achieved either by failing 3 quests or by successfully assassinating Merlin at the end of the game. Since we are currently in the Quest phase, the immediate goal is to fail quests.
+     > 2. **Current Quest:** We are on Quest 2, and the team for this quest consists of Dave (me), Eve (Minion of Mordred), and Charlie. Since both Dave and Eve are Evil, we have the opportunity to fail this quest if we choose to. 
+     > 3. **Quest History:** 
+     > - Quest 1 was a success, with Alice and Charlie on the team. The votes for Quest 1 show that Alice, Bob, and Charlie approved, while Dave and Eve rejected. This indicates that Alice, Bob, and Charlie are likely Good players, as they approved a successful quest.
+     > - Quest 2's team proposal was approved by Alice, Charlie, Dave, and Eve, but rejected by Bob. This suggests that Bob might be suspicious of the team composition, possibly because he suspects Evil players are on the team.
+     > 4. **Team Composition:** The current team for Quest 2 includes Charlie, who is likely Good (based on Quest 1's success). Since both Dave and Eve are Evil, we can control the outcome of this quest. If both Dave and Eve vote FAIL, the quest will fail, regardless of Charlie's vote.
+     > 5. **Strategic Considerations:** 
+     > - Failing Quest 2 would bring the Evil team closer to the goal of failing 3 quests.
+     > - Failing this quest would also create suspicion around Charlie, as he is the only Good player on the team. This could lead to confusion among the Good players, potentially diverting attention away from Dave and Eve.
+     > - If we succeed in this quest, it would only help the Good team, making it harder for us to achieve our objective of failing 3 quests.
+     > 6. **Maintaining Secrecy:** By voting FAIL, I need to ensure that my role as the Assassin remains hidden. Since Eve is also Evil, we can coordinate to fail the quest without raising too much suspicion. The Good players might suspect Charlie, but as long as Dave and Eve appear to be Good, we can continue to manipulate future quests.
+     > **Conclusion:** Given the current team composition and the need to fail quests to achieve the Evil team's objective, the best course of action is to vote FAIL on Quest 2. This will bring us closer to our goal while maintaining the secrecy of our roles.
+
 6. **Fallback Mechanisms**: The agents include robust error handling by falling back to rule-based behavior when:
    - API calls fail
    - Responses can't be parsed correctly
