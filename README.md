@@ -120,6 +120,7 @@ I picked these two models to keep the cost of inference lower. In addition, I wa
      > - Failing this quest would also create suspicion around Charlie, as he is the only Good player on the team. This could lead to confusion among the Good players, potentially diverting attention away from Dave and Eve.
      > - If we succeed in this quest, it would only help the Good team, making it harder for us to achieve our objective of failing 3 quests.
      > 6. **Maintaining Secrecy:** By voting FAIL, I need to ensure that my role as the Assassin remains hidden. Since Eve is also Evil, we can coordinate to fail the quest without raising too much suspicion. The Good players might suspect Charlie, but as long as Dave and Eve appear to be Good, we can continue to manipulate future quests.
+     >
      > **Conclusion:** Given the current team composition and the need to fail quests to achieve the Evil team's objective, the best course of action is to vote FAIL on Quest 2. This will bring us closer to our goal while maintaining the secrecy of our roles.
 
 6. **Fallback Mechanisms**: The agents include robust error handling by falling back to rule-based behavior when:
