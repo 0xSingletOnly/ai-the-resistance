@@ -138,6 +138,7 @@ I picked these two models to keep the cost of inference lower. In addition, I wa
 | DeepSeek v3 (no CoT)           | 44% (22/50)       | 56% (28/50)       | 67.9% (19/28)             | 32.1% (9/28)              | 0.0% (0/28)              |
 | DeepSeek v3 (with CoT)         | 48% (24/50)       | 52% (26/50)       | 65.4% (17/26)             | 34.6% (9/26)              | 0.0% (0/26)              |
 | DeepSeek r1                    | 40.0% (8/20)      | 60.0% (12/20)     | 50.0% (6/12)              | 50.0% (6/12)              | 0.0% (0/12)              |
+| Mistral-7b                     | 4% (2/50)         | 96% (48/50)       | 97.9% (47/48)             | 2.1% (1/48)               | 0.0% (0/48)          |
 
 ### Key Observations:
 
@@ -150,3 +151,5 @@ I picked these two models to keep the cost of inference lower. In addition, I wa
 4. **Quest Failure Rates**: The sharp drop in the percentage of evil wins by failed quests suggests that the good players with LLMs were more able to deduce who is an evil player, and hence not nominate those players for the quest.
 
 5. **Runtime Performance**: DeepSeek r1 completed 20 games in approximately 118 minutes. This was considerably slower than the chat models, which completed 50 games in the same amount of time.
+
+6. **Mistral-7b: Small model struggles**: Mistral-7b agents on the good team struggled with winning games. I suspect that this indicates smaller models lack the inherent capability understand strategies and the need for deception. As such, the evil team benefits as there are more ways for them to fail, and it is also easier for them to fail on quests as most quests only require 1 fail vote.
