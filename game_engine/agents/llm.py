@@ -162,15 +162,51 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
             return RuleBasedAgent(self.player).propose_team(game)
         
         try:
-            team_names = json.loads(re.search(r'\[(.*?)\]', response).group(0))
-
-            if len(team_names) != game.get_current_quest().required_team_size:
-                raise ValueError(f"Invalid team size: {len(team_names)}. Expected: {game.get_current_quest().required_team_size}")
-
+            # Use the more robust parsing approach for team names
+            def parse_team_names(response):
+                try:
+                    # First attempt: Try to parse the entire response as JSON
+                    return json.loads(response)
+                except json.JSONDecodeError:
+                    # Second attempt: Try to extract a JSON array using regex
+                    try:
+                        # Look for array pattern with quoted strings
+                        json_str = re.search(r'\[\s*(?:"[^"]*"|\'[^\']*\')(?:\s*,\s*(?:"[^"]*"|\'[^\']*\'))*\s*\]', response, re.DOTALL)
+                        if json_str:
+                            return json.loads(json_str.group(0))
+                        
+                        # If no match, try to find any content within brackets and format it properly
+                        bracket_content = re.search(r'\[(.*?)\]', response, re.DOTALL)
+                        if bracket_content:
+                            # Clean and process the content between brackets
+                            content = bracket_content.group(1)
+                            # Split by commas, strip whitespace and quotes
+                            items = [item.strip().strip('"\'') for item in content.split(',')]
+                            return items
+                        
+                        # If still no match, look for a list-like structure in the text
+                        names = re.findall(r'(?:^|\n)\s*["\']?(.*?)["\']?\s*(?:,|$)', response)
+                        if names:
+                            return [name.strip() for name in names if name.strip()]
+                        
+                        # Fallback: return empty list if no pattern matches
+                        return []
+                    except Exception as e:
+                        print(f"Error in regex parsing: {e}")
+                        return []
+            
+            team_names = parse_team_names(response)
             self._log_llm_response("PROPOSE_TEAM", prompt, response)
-            return [p for p in game.players if p.name in team_names]
-        except:
-            print(f"{self.player.name}, who is {self.player.role}, failed to use LLM to propose team, falling back to rule-based behavior")
+            team = [p for p in game.players if p.name in team_names]
+
+            # Continue with your existing validation logic
+            if len(team) != game.get_current_quest().required_team_size:
+                raise ValueError(f"Invalid team size: {len(team_names)}. Expected: {game.get_current_quest().required_team_size}")
+            
+            return team
+        except Exception as e:
+            print(f"{self.player.name}, who is {self.player.role}, failed to use LLM to propose team: {e}")
+            print(f"Response was: {response}")
             # Fallback to rule-based behavior on error
             return RuleBasedAgent(self.player).propose_team(game)
 
