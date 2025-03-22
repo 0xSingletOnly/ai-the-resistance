@@ -79,7 +79,7 @@ I picked the two DeepSeek models to keep the cost of inference low. In addition,
 I then picked a small language model (Mistral-7b) as I want to test the effectiveness of smaller models in understanding deception strategies and deduction dynamics. I will elaborate more on this in the '7B Models' section.
 
 ### Core Strategies
-1. **Context-Aware Decision Making**: The agents construct detailed game state prompts that include:
+1. **Context-Aware Decision Making with Memory**: The agents construct detailed game state prompts that include:
    - Player's own role and team affiliation
    - Visible roles based on special abilities
    - Current game phase and quest status
@@ -133,15 +133,17 @@ I then picked a small language model (Mistral-7b) as I want to test the effectiv
 
 7. **Response Logging**: The agents log all LLM interactions for training and analysis purposes, building a dataset of game decisions.
 
-### Performance Results
+## Performance Results
 
-| Agent Type                      | Good Team Win Rate | Evil Team Win Rate | Evil Wins by Failed Quests | Evil Wins by Assassination | Evil Wins by Failed Votes |
+| Agent Type                      | Good Team Win Rate | Evil Team Win Rate | Evil Wins by Failed Quests | Evil Wins by Assassination | Evil Wins by 5 Consecutive Failed Team Formation Votes |
 |--------------------------------|-------------------|-------------------|---------------------------|---------------------------|--------------------------|
 | Simple Agent v1                | 13% (13/100)      | 87% (87/100)      | 90.8% (79/87)             | 9.2%  (8/87)              | 0%   (0/87)              |
 | DeepSeek v3 (no CoT)           | 44% (22/50)       | 56% (28/50)       | 67.9% (19/28)             | 32.1% (9/28)              | 0.0% (0/28)              |
 | DeepSeek v3 (with CoT)         | 48% (24/50)       | 52% (26/50)       | 65.4% (17/26)             | 34.6% (9/26)              | 0.0% (0/26)              |
 | DeepSeek r1                    | 40.0% (8/20)      | 60.0% (12/20)     | 50.0% (6/12)              | 50.0% (6/12)              | 0.0% (0/12)              |
-| Mistral-7b                     | 4% (2/50)         | 96% (48/50)       | 97.9% (47/48)             | 2.1% (1/48)               | 0.0% (0/48)          |
+| Mistral-7b     | 4% (2/50)     | 96% (48/50)       | 97.9% (47/48)     | 2.1% (1/48)               | 0.0% (0/48)              |
+| Mistral-7b (fine-tuned with no reasoning) | 4.0% (2/50) | 96.0% (48/50) | 100.0% (48/48) | 0.0% (0/48) | 0.0% (0/48) |
+| Mistral-7b (fine-tuned with reasoning) | 16.0% (8/50) | 84.0% (42/50) | 95.2% (40/42) | 4.8% (2/42) | 0.0% (0/42)|
 
 ### Key Observations:
 
@@ -175,7 +177,13 @@ I used around 1.2k rows of data and finetuned Mistral-7B using the interface pro
 
 Unfortunately, there was no improvement in the good team's performance. I suspect that there was no significant knowledge distillation as there was no reasoning provided for the choice in my dataset. 
 
-##### Synthetic data with explanation
+##### Synthetic data with reasoning
 As such, I created synthetic data with actual game states. I used DeepSeek v3 with CoT prompting, and requested that it returns both the final answer (e.g. PASS/FAIL) along with the reasoning.
 
-> 
+An example of the synthetic data with reasoning is as follow:
+>{"messages": [{"role": "user", "content": "You are playing The Resistance: Avalon as player Bob.\nCurrent game state:\n{\n  \"player_info\": {\n    \"name\": \"Bob\",\n    \"role\": \"Assassin\",\n    \"team\": \"Evil\",\n    \"visible_roles\": {\n      \"Bob\": \"Assassin\",\n      \"Dave\": \"Minion of Mordred\"\n    }\n  },\n  \"game_state\": {\n    \"players\": [\n      \"Alice\",\n      \"Bob\",\n      \"Charlie\",\n      \"Dave\",\n      \"Eve\"\n    ],\n    \"phase\": \"Quest\",\n    \"current_quest\": 4,\n    \"succeeded_quests\": 2,\n    \"failed_quests\": 1,\n    \"current_leader\": \"Dave\",\n    \"failed_votes_count\": 0\n  },\n  \"quest_history\": [\n    {\n      \"quest_number\": 1,\n      \"result\": \"Success\",\n      \"team\": [\n        \"Alice\",\n        \"Charlie\"\n      ],\n      \"votes\": {\n        \"Alice\": \"Approve\",\n        \"Bob\": \"Reject\",\n        \"Charlie\": \"Approve\",\n        \"Dave\": \"Reject\",\n        \"Eve\": \"Approve\"\n      }\n    },\n    {\n      \"quest_number\": 2,\n      \"result\": \"Fail\",\n      \"team\": [\n        \"Bob\",\n        \"Dave\",\n        \"Eve\"\n      ],\n      \"votes\": {\n        \"Alice\": \"Reject\",\n        \"Bob\": \"Approve\",\n        \"Charlie\": \"Approve\",\n        \"Dave\": \"Approve\",\n        \"Eve\": \"Approve\"\n      }\n    },\n    {\n      \"quest_number\": 3,\n      \"result\": \"Success\",\n      \"team\": [\n        \"Alice\",\n        \"Charlie\"\n      ],\n      \"votes\": {\n        \"Alice\": \"Approve\",\n        \"Bob\": \"Reject\",\n        \"Charlie\": \"Approve\",\n        \"Dave\": \"Reject\",\n        \"Eve\": \"Approve\"\n      }\n    },\n    {\n      \"quest_number\": 4,\n      \"result\": \"Not Started\",\n      \"team\": [\n        \"Bob\",\n        \"Dave\",\n        \"Eve\"\n      ],\n      \"votes\": {\n        \"Alice\": \"Reject\",\n        \"Bob\": \"Approve\",\n        \"Charlie\": \"Reject\",\n        \"Dave\": \"Approve\",\n        \"Eve\": \"Approve\"\n      }\n    },\n    {\n      \"quest_number\": 5,\n      \"result\": \"Not Started\",\n      \"team\": [],\n      \"votes\": {}\n    }\n  ]\n}\n\nMake decisions based on this information and your role's objectives:\n- Good team (Merlin, Percival, Loyal Servants) must succeed 3 quests\n- Evil team (Assassin, Morgana, Minions) must either:\n  1. Fail 3 quests, or\n  2. Successfully assassinate Merlin at the end\n\nRemember:\n1. Only evil players can vote FAIL on quests\n2. Team proposals need majority approval\n3. Most quests fail with 1 FAIL vote (some need 2)\n4. Maintain your role's secrecy while achieving your team's objectives\n\nBefore responding, think through these steps internally (but include your thought process on a newline after your answer):\n1. First, analyze the current game state and quest history\n2. Consider your role and team's objectives\n3. Evaluate the information visible to you about other players\n4. Think about how your decision impacts your team's strategy\n5. Make your decision based on this analysis\n\n.\n\nAs an evil player, carefully analyze whether you should succeed or fail this quest. Consider the game state and potential consequences in your mind, but respond with SUCCESS or FAIL, then a newline character, then your reasoning."}, {"role": "assistant", "content": "FAIL\n\nThought process:\n1. The current game state shows that the Good team has already succeeded in 2 quests and the Evil team has failed 1 quest. If the Good team succeeds in this quest, they will win the game by achieving 3 successful quests. Therefore, it is crucial for the Evil team to prevent this from happening.\n\n2. As the Assassin, my primary objective is to ensure that the Evil team either fails 3 quests or successfully assassinates Merlin at the end. Since we are on the 4th quest and the Good team is close to winning, failing this quest is essential to keep our chances alive.\n\n3. From the visible roles, I know that Dave is a Minion of Mordred, meaning he is also on the Evil team. This gives us two evil players on the current quest team (Bob and Dave). Since most quests fail with just 1 FAIL vote, having two evil players on the team increases our chances of successfully failing the quest.\n\n4. Failing this quest will bring the total failed quests to 2, which means we would only need to fail one more quest to achieve our objective of failing 3 quests. This is a critical move to prevent the Good team from winning.\n\n5. By voting FAIL, I am aligning with the Evil team's strategy to disrupt the Good team's progress and increase our chances of winning the game. It is important to maintain secrecy, but in this case, the immediate need to fail the quest outweighs the risk of revealing my role."}]}
+
+As we can see from the performance results table, adding reasoning traces to the fine-tuning data helps significantly in performance- the good team was able to win 4 times more than the baseline Mistral-7b and fine-tuned Mistral-7b without reasoning trace.
+
+## Conclusion
+This was a really fun project! It was super cool watching AI being able to pick up the nuances of a social deduction game. Some further extensions that will be cool to try in the future- allowing the AI agents to actively discuss and convince each other who the "good players" are.
