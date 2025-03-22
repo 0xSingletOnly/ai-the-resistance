@@ -72,8 +72,11 @@ To improve agent performance, particularly for the good team, I implemented agen
 ### Models Used
 - DeepSeek v3 (with and without Chain of Thought prompting)
 - DeepSeek r1
+- Mistral-7b
 
-I picked these two models to keep the cost of inference lower. In addition, I wanted to test the utility of chain of thought prompting, and whether reasoning models can lead to better performance. However, due to the long inference time of reasoning agents, I only ran 20 games for them as opposed to 50 games for the standard chat models.
+I picked the two DeepSeek models to keep the cost of inference low. In addition, I wanted to test the utility of chain of thought prompting, and whether reasoning models can lead to better performance. However, due to the long inference time of reasoning agents, I only ran 20 games for them as opposed to 50 games for the standard chat models.
+
+I then picked a small language model (Mistral-7b) as I want to test the effectiveness of smaller models in understanding deception strategies and deduction dynamics. I will elaborate more on this in the '7B Models' section.
 
 ### Core Strategies
 1. **Context-Aware Decision Making**: The agents construct detailed game state prompts that include:
@@ -153,3 +156,26 @@ I picked these two models to keep the cost of inference lower. In addition, I wa
 5. **Runtime Performance**: DeepSeek r1 completed 20 games in approximately 118 minutes. This was considerably slower than the chat models, which completed 50 games in the same amount of time.
 
 6. **Mistral-7b: Small model struggles**: Mistral-7b agents on the good team struggled with winning games. I suspect that this indicates smaller models lack the inherent capability understand strategies and the need for deception. As such, the evil team benefits as there are more ways for them to fail, and it is also easier for them to fail on quests as most quests only require 1 fail vote.
+
+### 7B Models
+I wanted to use 7B models to test how well they can understand the strategies and deception required in a game of Avalon. To start off with, I picked Mistral-7B due to its API access and ease of fine-tuning.
+
+As can be seen from the performance results table, the agents on the good team struggled mightily with the 7B model. I suspect that 7B models are poor at reasoning and understanding the type of deception, which severely handicaps the good team. Note that when the underlying model/logic is weaker, the evil team is at an advantage. This is so as they have more ways to win, and also, most quests only need a single fail. Thus, good team has to ensure that the team on quest contains all good players, while the evil team only has to ensure that there exists at least one evil player on the quest.
+
+#### Knowledge distillation
+I wanted to see if I could do knowledge distillation from the bigger models (e.g. DeepSeek v3) into the smaller model (Mistral 7B).
+
+##### Fine-tuning data with no explanation
+To start off, I used the logs of the prompts + responses (e.g. APPROVE, REJECT, PASS, FAIL, team formation) from the best performing model, DeepSeek v3 with CoT thinking.
+
+A sample row of data is as follow:
+>{"messages": [{"role": "user", "content": "You are playing The Resistance: Avalon as player Dave.\nCurrent game state:\n{\n  \"player_info\": {\n    \"name\": \"Dave\",\n    \"role\": \"Loyal Servant of Arthur\",\n    \"team\": \"Good\",\n    \"visible_roles\": {\n      \"Dave\": \"Loyal Servant of Arthur\"\n    }\n  },\n  \"game_state\": {\n    \"players\": [\n      \"Alice\",\n      \"Bob\",\n      \"Charlie\",\n      \"Dave\",\n      \"Eve\"\n    ],\n    \"phase\": \"Team Building\",\n    \"current_quest\": 2,\n    \"succeeded_quests\": 1,\n    \"failed_quests\": 0,\n    \"current_leader\": \"Dave\",\n    \"failed_votes_count\": 0\n  },\n  \"quest_history\": [\n    {\n      \"quest_number\": 1,\n      \"result\": \"Success\",\n      \"team\": [\n        \"Alice\",\n        \"Dave\"\n      ],\n      \"votes\": {\n        \"Alice\": \"Approve\",\n        \"Bob\": \"Reject\",\n        \"Charlie\": \"Approve\",\n        \"Dave\": \"Approve\",\n        \"Eve\": \"Reject\"\n      }\n    },\n    {\n      \"quest_number\": 2,\n      \"result\": \"Not Started\",\n      \"team\": [],\n      \"votes\": {}\n    },\n    {\n      \"quest_number\": 3,\n      \"result\": \"Not Started\",\n      \"team\": [],\n      \"votes\": {}\n    },\n    {\n      \"quest_number\": 4,\n      \"result\": \"Not Started\",\n      \"team\": [],\n      \"votes\": {}\n    },\n    {\n      \"quest_number\": 5,\n      \"result\": \"Not Started\",\n      \"team\": [],\n      \"votes\": {}\n    }\n  ]\n}\n\nMake decisions based on this information and your role's objectives:\n- Good team (Merlin, Percival, Loyal Servants) must succeed 3 quests\n- Evil team (Assassin, Morgana, Minions) must either:\n  1. Fail 3 quests, or\n  2. Successfully assassinate Merlin at the end\n\nRemember:\n1. Only evil players can vote FAIL on quests\n2. Team proposals need majority approval\n3. Most quests fail with 1 FAIL vote (some need 2)\n4. Maintain your role's secrecy while achieving your team's objectives\n\nBefore responding, think through these steps internally (but do not include your thought process in the response):\n1. First, analyze the current game state and quest history\n2. Consider your role and team's objectives\n3. Evaluate the information visible to you about other players\n4. Think about how your decision impacts your team's strategy\n5. Make your decision based on this analysis\n\nIMPORTANT: Only provide the final answer in your response, not your reasoning.\n\nCarefully analyze which 3 players to propose for the current quest. Consider the game state and team dynamics in your mind, but respond with only a JSON list of player names."}, {"role": "assistant", "content": "``json\n[\"Alice\", \"Dave\", \"Eve\"]\n``"}]}
+
+I used around 1.2k rows of data and finetuned Mistral-7B using the interface provided by Mistral. Note that I avoided writing the fine-tuning code myself as I do not have access to my own GPU, and I wanted to save time required to setup the environment had I rented a cloud GPU.
+
+Unfortunately, there was no improvement in the good team's performance. I suspect that there was no significant knowledge distillation as there was no reasoning provided for the choice in my dataset. 
+
+##### Synthetic data with explanation
+As such, I created synthetic data with actual game states. I used DeepSeek v3 with CoT prompting, and requested that it returns both the final answer (e.g. PASS/FAIL) along with the reasoning.
+
+> 
