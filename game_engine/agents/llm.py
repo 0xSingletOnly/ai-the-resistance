@@ -126,7 +126,7 @@ Before responding, think through these steps internally (but do not include your
 4. Think about how your decision impacts your team's strategy
 5. Make your decision based on this analysis
 
-IMPORTANT: Only provide the final answer in your response, not your reasoning.
+IMPORTANT: In your response, provide your final answer, followed by a newline, then your reasoning.
 """
 
         return base_prompt
@@ -150,7 +150,7 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
         """Use LLM to propose a quest team based on game state and strategy."""
         prompt = self._get_game_state_prompt(game)
         if self.use_cot:
-            prompt += f"\nCarefully analyze which {game.get_current_quest().required_team_size} players to propose for the current quest. Consider the game state and team dynamics in your mind, but respond with only a JSON list of player names."
+            prompt += f"\nCarefully analyze which {game.get_current_quest().required_team_size} players to propose for the current quest. Consider the game state and team dynamics in your mind, then respond with a JSON list of player names, followed by a newline character, then your reasoning."
         else:
             prompt += f"\nYou need to propose a team of {game.get_current_quest().required_team_size} players for the current quest.\nRespond with only your chosen team as a JSON list of player names."
         
@@ -215,7 +215,7 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
         prompt = self._get_game_state_prompt(game)
         prompt += f"\nProposed team: {[p.name for p in proposed_team]}"
         if self.use_cot:
-            prompt += "\nCarefully analyze whether to approve or reject this team. Consider the team composition and game state in your mind, but respond with only APPROVE or REJECT."
+            prompt += "\nCarefully analyze whether to approve or reject this team. Consider the team composition and game state in your mind, respond with APPROVE or REJECT, followed by a newline character, then your reasoning."
         else:
             prompt += "\nShould you approve (APPROVE) or reject (REJECT) this team? Respond with exactly one of these options."
         
@@ -243,7 +243,7 @@ IMPORTANT: Only provide the final answer in your response, not your reasoning.
         
         prompt = self._get_game_state_prompt(game)
         if self.use_cot:
-            prompt += "\nAs an evil player, carefully analyze whether you should succeed or fail this quest. Consider the game state and potential consequences in your mind, but respond with only SUCCESS or FAIL."
+            prompt += "\nAs an evil player, carefully analyze whether you should succeed or fail this quest. Consider the game state and potential consequences in your mind, then respond with SUCCESS or FAIL, followed by a newline character, then your reasoning."
         else:
             prompt += "\nAs an evil player, should you succeed (SUCCESS) or fail (FAIL) this quest? Respond with exactly one of these options."
         
