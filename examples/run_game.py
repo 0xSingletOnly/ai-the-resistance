@@ -151,9 +151,10 @@ def run_simple_game(agent_type: Type[AvalonAgent] = RuleBasedAgent, model_name: 
     
     # Main game loop
     while not game.is_game_over():
-        #print_game_state(game)
-        time.sleep(2.5) # prevent API overload
-        
+        print_game_state(game)
+        #time.sleep(2.5) # prevent API overload
+        input("Press Enter to continue...")
+
         if game.phase == GamePhase.TEAM_BUILDING:
             # Current leader proposes a team
             leader = game.get_current_leader()
@@ -493,4 +494,4 @@ def run_multiple_games(num_games: int = 100, agent_type: Type[AvalonAgent] = Rul
     print(f"\nTotal time taken: {total_time:.2f} minutes")
 
 if __name__ == "__main__":
-    run_multiple_games(num_games=50, agent_type=LLMAgent, model_name="ft:open-mistral-7b:5389c2d2:20250322:e9dacce5", use_cot=True) 
+    run_multiple_games(num_games=1, agent_type=LLMAgent, model_name="ft:open-mistral-7b:5389c2d2:20250322:e9dacce5", use_cot=True) 
